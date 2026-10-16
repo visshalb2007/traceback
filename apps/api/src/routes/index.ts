@@ -1,4 +1,5 @@
 import type { AppServer } from '../types';
+import { authRoutes } from '../modules/auth/auth.routes';
 import { healthRoutes } from '../modules/health/health.routes';
 
 /**
@@ -7,4 +8,5 @@ import { healthRoutes } from '../modules/health/health.routes';
  */
 export async function registerRoutes(app: AppServer): Promise<void> {
   await app.register(healthRoutes);
+  await app.register(authRoutes, { prefix: '/api/v1' });
 }

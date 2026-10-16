@@ -10,6 +10,7 @@ import type { AppServer } from './types';
 import { loadEnv, type AppEnv } from './env';
 import { createLogger, newRequestId } from './logger';
 import { toErrorResponse } from './lib/errors';
+import { authPlugin } from './plugins/auth.plugin';
 import { dbPlugin } from './plugins/db.plugin';
 import { registerRoutes } from './routes';
 
@@ -33,6 +34,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  app.decorate('config', env);
+
   await app.register(cors, {
     origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map((o) => o.trim()),
     credentials: true,
@@ -47,6 +50,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
   });
 
   await app.register(dbPlugin, { env });
+
+  await app.register(authPlugin);
 
   app.setNotFoundHandler((request, reply) => {
     void reply.status(404).send({

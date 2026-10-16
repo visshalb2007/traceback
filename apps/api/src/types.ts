@@ -2,11 +2,14 @@ import type {
   FastifyBaseLogger,
   FastifyInstance,
   FastifyRequest,
+  preHandlerAsyncHookHandler,
   RawReplyDefaultExpression,
   RawRequestDefaultExpression,
   RawServerDefault,
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import type { AppEnv } from './env';
+import type { AuthService } from './modules/auth/auth.service';
 
 /**
  * The one Fastify instance type this codebase uses: Zod as the schema/validator
@@ -36,6 +39,14 @@ export interface AuthContext {
 }
 
 declare module 'fastify' {
+  interface FastifyInstance {
+    /** Validated environment, decorated once at boot. */
+    config: AppEnv;
+    authService: AuthService;
+    /** preHandler that populates `request.auth` or throws 401. */
+    requireAuth: preHandlerAsyncHookHandler;
+  }
+
   interface FastifyRequest {
     /** Attached by the auth plugin when a valid bearer token/key is present. */
     auth?: AuthContext;
