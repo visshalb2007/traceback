@@ -82,6 +82,11 @@ export const incidentLinkSourceSchema = z.enum(['manual', 'suggested']);
 export type IncidentLinkSource = z.infer<typeof incidentLinkSourceSchema>;
 export const INCIDENT_LINK_SOURCES = incidentLinkSourceSchema.options;
 
+/** Comments, resolution notes and timeline notes all live in one append-only table. */
+export const incidentUpdateKindSchema = z.enum(['comment', 'resolution_note', 'timeline_note']);
+export type IncidentUpdateKind = z.infer<typeof incidentUpdateKindSchema>;
+export const INCIDENT_UPDATE_KINDS = incidentUpdateKindSchema.options;
+
 export const incidentLinkStatusSchema = z.enum(['suggested', 'confirmed', 'rejected']);
 export type IncidentLinkStatus = z.infer<typeof incidentLinkStatusSchema>;
 export const INCIDENT_LINK_STATUSES = incidentLinkStatusSchema.options;

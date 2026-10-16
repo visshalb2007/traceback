@@ -6,6 +6,7 @@ import {
   incidentLinkStatusSchema,
   incidentSeveritySchema,
   incidentStatusSchema,
+  incidentUpdateKindSchema,
 } from '../enums';
 
 export const createIncidentSchema = z.object({
@@ -62,11 +63,23 @@ export type AddAssigneeInput = z.infer<typeof addAssigneeSchema>;
 export const incidentCommentSchema = z.object({
   body: z.string().min(1).max(20000),
   /** kind distinguishes free comments from resolution notes in the timeline. */
-  kind: z.enum(['comment', 'resolution_note', 'timeline_note']).default('comment'),
+  kind: incidentUpdateKindSchema.default('comment'),
   occurredAt: z.string().datetime({ offset: true }).optional(),
   idempotencyKey: z.string().min(1).max(200).optional(),
 });
 export type IncidentCommentInput = z.infer<typeof incidentCommentSchema>;
+
+export const incidentUpdateSchema = z.object({
+  id: uuidSchema,
+  incidentId: uuidSchema,
+  authorId: uuidSchema.nullable(),
+  authorName: z.string().nullable(),
+  kind: incidentUpdateKindSchema,
+  body: z.string(),
+  occurredAt: z.string(),
+  createdAt: z.string(),
+});
+export type IncidentUpdate = z.infer<typeof incidentUpdateSchema>;
 
 export const linkIncidentSchema = z.object({
   entityType: incidentLinkEntityTypeSchema,

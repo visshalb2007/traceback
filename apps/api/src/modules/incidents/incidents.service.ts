@@ -1,11 +1,18 @@
-import type { CreateIncidentInput, Incident, UpdateIncidentInput } from '@traceback/shared';
+import type {
+  ChangeIncidentStatusInput,
+  CreateIncidentInput,
+  Incident,
+  UpdateIncidentInput,
+} from '@traceback/shared';
 import type { Database } from '../../db/client';
 import type { IncidentRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
 import { encodeCursor, decodeCursor } from '../../lib/cursor';
 import { diffFields, threeWayMerge } from '../../lib/merge';
 import type { EventsService } from '../events/events.service';
+import { createIncidentUpdatesRepository } from './incident-updates.repository';
 import { computeFingerprint } from './fingerprint';
+import { planStatusChange } from './incidents.status';
 import {
   createIncidentsRepository,
   type IncidentListFilters,
@@ -113,10 +120,17 @@ export interface IncidentsService {
     input: UpdateIncidentInput,
     actorId: string | null,
   ): Promise<Incident>;
+  changeStatus(
+    projectId: string,
+    incidentId: string,
+    input: ChangeIncidentStatusInput,
+    actorId: string | null,
+  ): Promise<Incident>;
 }
 
 export function createIncidentsService(db: Database, events: EventsService): IncidentsService {
   const repo: IncidentsRepository = createIncidentsRepository(db);
+  const updatesRepo = createIncidentUpdatesRepository(db);
 
   return {
     async create(projectId, input, actorId) {
@@ -281,6 +295,72 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
         payload: {
           ...snapshotIncident(updated),
           changes: diffFields(snapshotIncident(existing), applied),
+        },
+      });
+
+      return toIncidentDto(updated);
+    },
+
+    async changeStatus(projectId, incidentId, input, actorId) {
+      const existing = await repo.findById(projectId, incidentId);
+      if (!existing) throw AppError.notFound('Incident', incidentId);
+
+      if (
+        input.expectedRowVersion !== undefined &&
+        input.expectedRowVersion !== existing.rowVersion
+      ) {
+        throw AppError.versionConflict('Incident changed since you loaded it', {
+          expectedRowVersion: input.expectedRowVersion,
+          currentRowVersion: existing.rowVersion,
+          current: toIncidentDto(existing),
+        });
+      }
+
+      const now = new Date();
+      const { patch, eventType } = planStatusChange(
+        existing,
+        input.status,
+        actorId,
+        input.note,
+        now,
+      );
+
+      const updated = await repo.update(
+        projectId,
+        incidentId,
+        { ...patch, updatedAt: now },
+        existing.rowVersion,
+      );
+      if (!updated) {
+        throw AppError.versionConflict('Incident was modified by someone else', {
+          expectedRowVersion: existing.rowVersion,
+        });
+      }
+
+      // A note attached to a transition is part of the record, so it is stored in
+      // the same append-only stream as free comments.
+      if (input.note) {
+        await updatesRepo.insert({
+          incidentId,
+          authorId: actorId,
+          kind: input.status === 'resolved' ? 'resolution_note' : 'timeline_note',
+          body: input.note,
+        });
+      }
+
+      await events.append({
+        projectId,
+        type: eventType,
+        entityType: 'incident',
+        entityId: incidentId,
+        actorId,
+        occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
+        idempotencyKey: input.idempotencyKey,
+        payload: {
+          ...snapshotIncident(updated),
+          status: updated.status,
+          fromStatus: existing.status,
+          note: input.note ?? null,
         },
       });
 

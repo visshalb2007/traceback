@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  changeIncidentStatusSchema,
   createIncidentSchema,
   errorResponseSchema,
   incidentQuerySchema,
@@ -122,5 +123,24 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         request.auth!.userId,
       );
     },
+  );
+
+  app.post(
+    '/projects/:projectId/incidents/:incidentId/status',
+    {
+      preHandler: [app.requireAuth, app.authorize('incident:update')],
+      schema: {
+        params: incidentParamsSchema,
+        body: changeIncidentStatusSchema,
+        response: { 200: incidentSchema, ...commonErrors },
+      },
+    },
+    async (request) =>
+      service.changeStatus(
+        request.params.projectId,
+        request.params.incidentId,
+        request.body,
+        request.auth!.userId,
+      ),
   );
 }
