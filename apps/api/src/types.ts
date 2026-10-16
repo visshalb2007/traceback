@@ -13,6 +13,7 @@ import type { AppEnv } from './env';
 import type { ProjectRow } from './db/schema';
 import type { Action } from './lib/policy';
 import type { AuthService } from './modules/auth/auth.service';
+import type { EventsService } from './modules/events/events.service';
 import type { MembersRepository } from './modules/members/members.repository';
 
 /**
@@ -50,6 +51,8 @@ declare module 'fastify' {
     /** preHandler that populates `request.auth` or throws 401. */
     requireAuth: preHandlerAsyncHookHandler;
     membersRepository: MembersRepository;
+    /** Append-only event store; the source of truth for every timeline. */
+    events: EventsService;
     /** preHandler factory that resolves the caller's project role and enforces the policy matrix. */
     authorize: (action: Action) => preHandlerAsyncHookHandler;
   }
