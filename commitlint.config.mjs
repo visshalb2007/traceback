@@ -25,6 +25,7 @@ export default {
         'audit',
         'webhooks',
         'realtime',
+        'apikeys',
         'docker',
         'ci',
         'deploy',

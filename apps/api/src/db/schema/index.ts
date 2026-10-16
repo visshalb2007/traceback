@@ -14,3 +14,4 @@ export * from './events';
 export * from './audit';
 export * from './webhooks';
 export * from './refresh-tokens';
+export * from './api-keys';

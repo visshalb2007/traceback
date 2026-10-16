@@ -35,7 +35,12 @@ export const rbacPlugin = fp(
         throw AppError.notFound('Project', projectId);
       }
 
-      const role = await members.findRole(projectId, userId);
+      // An API key carries its own fixed role and is bound to exactly one project.
+      // A key used against a different project resolves to no role -> 404.
+      const role =
+        request.apiKey && request.apiKey.projectId === projectId
+          ? request.apiKey.role
+          : await members.findRole(projectId, userId);
       if (!role) {
         // Deliberately a 404: revealing "you are not a member" leaks existence.
         throw AppError.notFound('Project', projectId);

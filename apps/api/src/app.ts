@@ -10,6 +10,7 @@ import type { AppServer } from './types';
 import { loadEnv, type AppEnv } from './env';
 import { createLogger, newRequestId } from './logger';
 import { toErrorResponse } from './lib/errors';
+import { apiKeysPlugin } from './plugins/apikeys.plugin';
 import { authPlugin } from './plugins/auth.plugin';
 import { auditPlugin } from './plugins/audit.plugin';
 import { dbPlugin } from './plugins/db.plugin';
@@ -54,6 +55,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
   });
 
   await app.register(dbPlugin, { env });
+
+  await app.register(apiKeysPlugin);
 
   await app.register(authPlugin);
 

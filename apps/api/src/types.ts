@@ -66,6 +66,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** Attached by the auth plugin when a valid bearer token/key is present. */
     auth?: AuthContext;
+    /** Present when the caller authenticated with a project-scoped API key. */
+    apiKey?: { id: string; projectId: string; role: ProjectRole };
     /** Populated by `authorize()` once the caller's role has been resolved. */
     projectRole?: ProjectRole;
     /** Populated by `authorize()` with the (non-deleted) project row. */

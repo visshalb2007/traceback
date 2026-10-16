@@ -16,4 +16,5 @@ export * from './schemas/timeline';
 export * from './schemas/correlation';
 export * from './schemas/dashboard';
 export * from './schemas/webhook';
+export * from './schemas/api-key';
 export * from './schemas/audit';

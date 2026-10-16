@@ -1,5 +1,6 @@
 import type { AppServer } from '../types';
 import { auditRoutes } from '../modules/audit/audit.routes';
+import { apiKeysRoutes } from '../modules/apikeys/apikeys.routes';
 import { authRoutes } from '../modules/auth/auth.routes';
 import { changesRoutes } from '../modules/changes/changes.routes';
 import { correlationRoutes } from '../modules/correlation/correlation.routes';
@@ -38,6 +39,7 @@ export async function registerRoutes(app: AppServer): Promise<void> {
       await api.register(timelineRoutes);
       await api.register(realtimeRoutes);
       await api.register(webhooksRoutes);
+      await api.register(apiKeysRoutes);
     },
     { prefix: '/api/v1' },
   );
