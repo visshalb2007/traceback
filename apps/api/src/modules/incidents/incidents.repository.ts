@@ -11,6 +11,8 @@ export type SortOrder = 'asc' | 'desc';
 /**
  * One row of the recurrence aggregation: raw column names (snake_case) because it
  * comes straight back from a hand-written GROUP BY rather than the query builder.
+ * Timestamps are `Date | string` because `db.execute` bypasses Drizzle's column
+ * mapping (see `lib/time.ts`).
  */
 export type RecurringFingerprintRow = {
   fingerprint: string;
@@ -19,8 +21,8 @@ export type RecurringFingerprintRow = {
   severity: IncidentSeverity;
   count: number;
   active_count: number;
-  first_seen_at: Date;
-  last_seen_at: Date;
+  first_seen_at: Date | string;
+  last_seen_at: Date | string;
   incident_ids: string[];
 };
 

@@ -11,18 +11,26 @@ import { createHash } from 'node:crypto';
  * and `"timeout after 4521ms (req a1b2)"` collapse to the same string.
  */
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+/** A request id carried in the signature, e.g. `(req 9f2c)` or `req: 9f2c1a3b`. */
+const REQUEST_ID_PATTERN = /\breq\b[\s:#-]*[0-9a-z-]+/gi;
 const SHA_PATTERN = /\b[0-9a-f]{7,40}\b/gi;
 const NUMBER_PATTERN = /\d+/g;
 
 export function normalizeForFingerprint(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(UUID_PATTERN, ' <id> ')
-    .replace(SHA_PATTERN, ' <sha> ')
-    .replace(NUMBER_PATTERN, ' <n> ')
-    .replace(/[^a-z<>]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
+  return (
+    text
+      .toLowerCase()
+      .replace(UUID_PATTERN, ' <id> ')
+      // A request id changes on every report but never identifies the problem, so
+      // drop the whole `req <id>` fragment before the generic masks below can turn
+      // its digits/hex into id-specific noise.
+      .replace(REQUEST_ID_PATTERN, ' ')
+      .replace(SHA_PATTERN, ' <sha> ')
+      .replace(NUMBER_PATTERN, ' <n> ')
+      .replace(/[^a-z<>]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ')
+  );
 }
 
 export interface FingerprintParts {

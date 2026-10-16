@@ -14,6 +14,7 @@ import type { IncidentRow, IncidentUpdateRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
 import { encodeCursor, decodeCursor } from '../../lib/cursor';
 import { diffFields, threeWayMerge } from '../../lib/merge';
+import { toIsoTimestamp } from '../../lib/time';
 import type { AuditContext } from '../audit/audit.service';
 import { writeAudit } from '../audit/audit.service';
 import type { EventsService } from '../events/events.service';
@@ -104,8 +105,8 @@ export function toFingerprintGroupDto(row: RecurringFingerprintRow): IncidentFin
     severity: row.severity,
     count: row.count,
     activeCount: row.active_count,
-    firstSeenAt: row.first_seen_at.toISOString(),
-    lastSeenAt: row.last_seen_at.toISOString(),
+    firstSeenAt: toIsoTimestamp(row.first_seen_at),
+    lastSeenAt: toIsoTimestamp(row.last_seen_at),
     incidentIds: row.incident_ids,
   };
 }

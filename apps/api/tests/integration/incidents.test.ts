@@ -145,7 +145,10 @@ describe.skipIf(!hasTestDatabase())('incidents (integration)', () => {
 
   it('groups incidents that share a fingerprint as recurring', async () => {
     const { projectId, token } = await setup();
-    await createIncident(projectId, token, { service: 'checkout' });
+    await createIncident(projectId, token, {
+      service: 'checkout',
+      errorSignature: 'timeout after 1000ms (req ab12)',
+    });
     // A different request id in the signature must not defeat the fingerprint.
     await createIncident(projectId, token, {
       service: 'checkout',

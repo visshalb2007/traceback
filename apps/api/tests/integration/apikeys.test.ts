@@ -80,6 +80,21 @@ describe.skipIf(!hasTestDatabase())('project API keys (integration)', () => {
     expect(response.statusCode).toBe(404);
   });
 
+  it("cannot reach another project's nested resources", async () => {
+    const owner = await registerUser(harness.app);
+    const first = await createProject(harness.app, owner.accessToken, { name: 'First' });
+    const second = await createProject(harness.app, owner.accessToken, { name: 'Second' });
+    const key = await issueKey(first.id, owner.accessToken, 'member');
+
+    const response = await harness.app.inject({
+      method: 'GET',
+      url: `${API}/projects/${second.id}/incidents`,
+      headers: bearer(key.token),
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
+  });
+
   it('stops working once revoked', async () => {
     const owner = await registerUser(harness.app);
     const project = await createProject(harness.app, owner.accessToken);

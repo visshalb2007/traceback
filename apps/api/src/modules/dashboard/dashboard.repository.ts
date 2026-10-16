@@ -28,8 +28,8 @@ export type RecurringIssueRow = {
   service: string | null;
   occurrences: number;
   avg_mttr_seconds: number | null;
-  first_seen_at: Date;
-  last_seen_at: Date;
+  first_seen_at: Date | string;
+  last_seen_at: Date | string;
   incident_ids: string[];
 };
 
@@ -39,7 +39,7 @@ export type TopSuspectRow = {
   environment: string;
   status: DeploymentStatus;
   version: string | null;
-  occurred_at: Date;
+  occurred_at: Date | string;
   linked_incident_count: number;
   score: number;
   reasons: string[] | null;
@@ -50,6 +50,9 @@ export type TopSuspectRow = {
  * counted in Postgres — pulling raw rows into Node just to count them would not
  * survive a real project's history. The service layer turns these rows into the
  * `DashboardMetrics` DTO (and fills the gaps Postgres cannot, like empty days).
+ *
+ * Window bounds are bound as ISO strings rather than `Date`s: a raw `sql` param is
+ * not column-typed, so drizzle does not map a `Date` for the postgres driver.
  */
 export function createDashboardRepository(db: DbExecutor) {
   return {
@@ -59,7 +62,7 @@ export function createDashboardRepository(db: DbExecutor) {
           select severity, status, count(*)::int as count
           from ${incidents}
           where ${incidents.projectId} = ${projectId}
-            and ${incidents.startedAt} between ${from} and ${to}
+            and ${incidents.startedAt} between ${from.toISOString()} and ${to.toISOString()}
           group by severity, status
         `)),
       ];
@@ -77,7 +80,7 @@ export function createDashboardRepository(db: DbExecutor) {
           from ${incidents}
           where ${incidents.projectId} = ${projectId}
             and ${incidents.resolvedAt} is not null
-            and ${incidents.resolvedAt} between ${from} and ${to}
+            and ${incidents.resolvedAt} between ${from.toISOString()} and ${to.toISOString()}
         `)),
       ];
     },
@@ -91,7 +94,7 @@ export function createDashboardRepository(db: DbExecutor) {
                  count(*)::int as count
           from ${deployments}
           where ${deployments.projectId} = ${projectId}
-            and coalesce(${deployments.finishedAt}, ${deployments.startedAt}, ${deployments.createdAt}) between ${from} and ${to}
+            and coalesce(${deployments.finishedAt}, ${deployments.startedAt}, ${deployments.createdAt}) between ${from.toISOString()} and ${to.toISOString()}
           group by environment, status, day
         `)),
       ];
@@ -117,7 +120,7 @@ export function createDashboardRepository(db: DbExecutor) {
             array_agg(${incidents.id} order by ${incidents.startedAt} desc) as incident_ids
           from ${incidents}
           where ${incidents.projectId} = ${projectId}
-            and ${incidents.startedAt} between ${from} and ${to}
+            and ${incidents.startedAt} between ${from.toISOString()} and ${to.toISOString()}
           group by ${incidents.fingerprint}
           having count(*) >= 2
           order by count(*) desc, max(${incidents.startedAt}) desc
@@ -154,7 +157,7 @@ export function createDashboardRepository(db: DbExecutor) {
             on ${incidentLinks.entityType} = 'deployment'
            and ${incidentLinks.entityId} = ${deployments.id}
           where ${deployments.projectId} = ${projectId}
-            and coalesce(${deployments.finishedAt}, ${deployments.startedAt}, ${deployments.createdAt}) between ${from} and ${to}
+            and coalesce(${deployments.finishedAt}, ${deployments.startedAt}, ${deployments.createdAt}) between ${from.toISOString()} and ${to.toISOString()}
           group by ${deployments.id}
           having count(${incidentLinks.id}) > 0
           order by score desc, linked_incident_count desc, occurred_at desc

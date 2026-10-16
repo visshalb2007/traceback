@@ -8,6 +8,7 @@ import type {
 } from '@traceback/shared';
 import { DEPLOYMENT_STATUSES, INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '@traceback/shared';
 import type { Database } from '../../db/client';
+import { toIsoTimestamp } from '../../lib/time';
 import { summarizeEvent } from '../timeline/timeline.service';
 import {
   createDashboardRepository,
@@ -145,8 +146,8 @@ export function toRecurringIssue(
     service: row.service,
     occurrences: row.occurrences,
     avgMttrSeconds: row.avg_mttr_seconds,
-    firstSeenAt: row.first_seen_at.toISOString(),
-    lastSeenAt: row.last_seen_at.toISOString(),
+    firstSeenAt: toIsoTimestamp(row.first_seen_at),
+    lastSeenAt: toIsoTimestamp(row.last_seen_at),
     incidentIds: row.incident_ids,
   };
 }
@@ -158,7 +159,7 @@ export function toSuspectDeployment(row: TopSuspectRow): SuspectDeployment {
     environment: row.environment,
     status: row.status,
     version: row.version,
-    occurredAt: row.occurred_at.toISOString(),
+    occurredAt: toIsoTimestamp(row.occurred_at),
     linkedIncidentCount: row.linked_incident_count,
     score: Number(row.score.toFixed(4)),
     reasons: row.reasons ?? [],

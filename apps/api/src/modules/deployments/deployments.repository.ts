@@ -115,7 +115,9 @@ export function createDeploymentsRepository(db: DbExecutor) {
         .where(
           and(
             eq(deployments.projectId, projectId),
-            sql`coalesce(${deployments.finishedAt}, ${deployments.startedAt}, ${deployments.createdAt}) between ${from} and ${to}`,
+            // Dates must be bound as ISO strings: a raw `sql` param is not
+            // column-typed, so drizzle does not map the Date for the driver.
+            sql`coalesce(${deployments.finishedAt}, ${deployments.startedAt}, ${deployments.createdAt}) between ${from.toISOString()} and ${to.toISOString()}`,
           ),
         )
         .orderBy(desc(deployments.createdAt))

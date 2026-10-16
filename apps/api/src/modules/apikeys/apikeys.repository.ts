@@ -61,7 +61,9 @@ export function createApiKeysRepository(db: DbExecutor) {
     async deleteExpired(before: Date): Promise<number> {
       const rows = await db
         .delete(apiKeys)
-        .where(sql`${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} < ${before}`)
+        .where(
+          sql`${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} < ${before.toISOString()}`,
+        )
         .returning({ id: apiKeys.id });
       return rows.length;
     },
