@@ -11,6 +11,7 @@ import { membersRoutes } from '../modules/members/members.routes';
 import { projectsRoutes } from '../modules/projects/projects.routes';
 import { realtimeRoutes } from '../modules/realtime/realtime.routes';
 import { timelineRoutes } from '../modules/timeline/timeline.routes';
+import { webhooksRoutes } from '../modules/webhooks/webhooks.routes';
 
 /**
  * Every module exposes an async plugin so app.ts stays a flat, readable list of
@@ -32,6 +33,7 @@ export async function registerRoutes(app: AppServer): Promise<void> {
       await api.register(auditRoutes);
       await api.register(timelineRoutes);
       await api.register(realtimeRoutes);
+      await api.register(webhooksRoutes);
     },
     { prefix: '/api/v1' },
   );
