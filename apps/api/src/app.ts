@@ -11,6 +11,7 @@ import { loadEnv, type AppEnv } from './env';
 import { createLogger, newRequestId } from './logger';
 import { toErrorResponse } from './lib/errors';
 import { authPlugin } from './plugins/auth.plugin';
+import { auditPlugin } from './plugins/audit.plugin';
 import { dbPlugin } from './plugins/db.plugin';
 import { eventsPlugin } from './plugins/events.plugin';
 import { rbacPlugin } from './plugins/rbac.plugin';
@@ -58,6 +59,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
   await app.register(rbacPlugin);
 
   await app.register(eventsPlugin);
+
+  await app.register(auditPlugin);
 
   app.setNotFoundHandler((request, reply) => {
     void reply.status(404).send({

@@ -1,7 +1,7 @@
 import { and, arrayContains, asc, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { IncidentSeverity, IncidentStatus } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { incidents } from '../../db/schema';
 import type { IncidentRow, NewIncidentRow } from '../../db/schema';
 
@@ -58,7 +58,7 @@ const SORT_COLUMN: Record<IncidentSortKey, PgColumn> = {
   status: incidents.status,
 };
 
-export function createIncidentsRepository(db: Database) {
+export function createIncidentsRepository(db: DbExecutor) {
   const sortColumn = (sort: IncidentSortKey): PgColumn => SORT_COLUMN[sort];
 
   return {

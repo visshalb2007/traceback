@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { incidentUpdates, users } from '../../db/schema';
 import type { IncidentUpdateRow, NewIncidentUpdateRow } from '../../db/schema';
 
@@ -7,7 +7,7 @@ import type { IncidentUpdateRow, NewIncidentUpdateRow } from '../../db/schema';
  * Comments and timeline notes are append-only: no update or delete path exists, so
  * two responders writing at once can never conflict over a comment.
  */
-export function createIncidentUpdatesRepository(db: Database) {
+export function createIncidentUpdatesRepository(db: DbExecutor) {
   return {
     async insert(row: NewIncidentUpdateRow): Promise<IncidentUpdateRow> {
       const [inserted] = await db.insert(incidentUpdates).values(row).returning();

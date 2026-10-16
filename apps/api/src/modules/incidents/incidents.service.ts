@@ -12,6 +12,8 @@ import type { IncidentRow, IncidentUpdateRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
 import { encodeCursor, decodeCursor } from '../../lib/cursor';
 import { diffFields, threeWayMerge } from '../../lib/merge';
+import type { AuditContext } from '../audit/audit.service';
+import { writeAudit } from '../audit/audit.service';
 import type { EventsService } from '../events/events.service';
 import { createIncidentUpdatesRepository } from './incident-updates.repository';
 import { computeFingerprint } from './fingerprint';
@@ -72,9 +74,8 @@ export function snapshotIncident(row: IncidentRow): Record<string, unknown> {
   };
 }
 
-/** Whitelist the client patch down to the mergeable fields. */ export function incidentPatch(
-  input: UpdateIncidentInput,
-): Record<string, unknown> {
+/** Whitelist the client patch down to the mergeable fields. */
+export function incidentPatch(input: UpdateIncidentInput): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
@@ -126,6 +127,7 @@ export interface IncidentsService {
     projectId: string,
     input: CreateIncidentInput,
     actorId: string | null,
+    context?: AuditContext,
   ): Promise<RecordIncidentResult>;
   list(
     projectId: string,
@@ -139,18 +141,21 @@ export interface IncidentsService {
     incidentId: string,
     input: UpdateIncidentInput,
     actorId: string | null,
+    context?: AuditContext,
   ): Promise<Incident>;
   changeStatus(
     projectId: string,
     incidentId: string,
     input: ChangeIncidentStatusInput,
     actorId: string | null,
+    context?: AuditContext,
   ): Promise<Incident>;
   addComment(
     projectId: string,
     incidentId: string,
     input: IncidentCommentInput,
     actorId: string | null,
+    context?: AuditContext,
   ): Promise<IncidentUpdate>;
   listUpdates(projectId: string, incidentId: string): Promise<IncidentUpdate[]>;
 }
@@ -160,7 +165,7 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
   const updatesRepo = createIncidentUpdatesRepository(db);
 
   return {
-    async create(projectId, input, actorId) {
+    async create(projectId, input, actorId, context) {
       if (input.idempotencyKey) {
         const existing = await events.find(projectId, input.idempotencyKey);
         if (existing && existing.entityType === 'incident') {
@@ -177,36 +182,57 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
         errorSignature: input.errorSignature,
       });
 
-      const row = await repo.insert({
-        projectId,
-        title: input.title,
-        description: input.description ?? null,
-        severity: input.severity,
-        status: input.status,
-        service: input.service ?? null,
-        errorSignature: input.errorSignature ?? null,
-        affectedComponents: input.affectedComponents,
-        environment: input.environment ?? null,
-        fingerprint,
-        startedAt: new Date(input.startedAt),
-        detectedAt: input.detectedAt ? new Date(input.detectedAt) : null,
-        resolvedAt: input.resolvedAt ? new Date(input.resolvedAt) : null,
-        createdBy: actorId,
-      });
+      // The row, its event and its audit entry share one transaction: a failed
+      // audit write rolls the incident back rather than leaving a silent change.
+      const row = await db.transaction(async (tx) => {
+        const txRepo = createIncidentsRepository(tx);
+        const inserted = await txRepo.insert({
+          projectId,
+          title: input.title,
+          description: input.description ?? null,
+          severity: input.severity,
+          status: input.status,
+          service: input.service ?? null,
+          errorSignature: input.errorSignature ?? null,
+          affectedComponents: input.affectedComponents,
+          environment: input.environment ?? null,
+          fingerprint,
+          startedAt: new Date(input.startedAt),
+          detectedAt: input.detectedAt ? new Date(input.detectedAt) : null,
+          resolvedAt: input.resolvedAt ? new Date(input.resolvedAt) : null,
+          createdBy: actorId,
+        });
 
-      await events.append({
-        projectId,
-        type: 'incident.created',
-        entityType: 'incident',
-        entityId: row.id,
-        actorId,
-        occurredAt,
-        idempotencyKey: input.idempotencyKey,
-        payload: {
-          ...snapshotIncident(row),
-          status: row.status,
-          fingerprint: row.fingerprint,
-        },
+        await events.append(
+          {
+            projectId,
+            type: 'incident.created',
+            entityType: 'incident',
+            entityId: inserted.id,
+            actorId,
+            occurredAt,
+            idempotencyKey: input.idempotencyKey,
+            payload: {
+              ...snapshotIncident(inserted),
+              status: inserted.status,
+              fingerprint: inserted.fingerprint,
+            },
+          },
+          tx,
+        );
+
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'create',
+          entityType: 'incident',
+          entityId: inserted.id,
+          after: snapshotIncident(inserted),
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+        });
+
+        return inserted;
       });
 
       return { ...toIncidentDto(row), replayed: false };
@@ -239,183 +265,246 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
       return toIncidentDto(row);
     },
 
-    async update(projectId, incidentId, input, actorId) {
-      const existing = await repo.findById(projectId, incidentId);
-      if (!existing) throw AppError.notFound('Incident', incidentId);
+    async update(projectId, incidentId, input, actorId, context) {
+      const updated = await db.transaction(async (tx) => {
+        const txRepo = createIncidentsRepository(tx);
+        const existing = await txRepo.findById(projectId, incidentId);
+        if (!existing) throw AppError.notFound('Incident', incidentId);
 
-      const patch = incidentPatch(input);
-      let applied = patch;
+        const patch = incidentPatch(input);
+        let applied = patch;
 
-      // Optimistic concurrency only bites when the caller declares the version they
-      // edited. When it has moved on, we recover the caller's base snapshot from the
-      // event that carried that version and three-way merge, so edits to *different*
-      // fields still succeed and only genuine clashes raise a 409.
-      if (
-        input.expectedRowVersion !== undefined &&
-        input.expectedRowVersion !== existing.rowVersion
-      ) {
-        const history = await events.listForEntity(projectId, 'incident', incidentId);
-        const baseEvent = history.find(
-          (event) => event.payload.rowVersion === input.expectedRowVersion,
+        // Optimistic concurrency only bites when the caller declares the version they
+        // edited. When it has moved on, we recover the caller's base snapshot from the
+        // event that carried that version and three-way merge, so edits to *different*
+        // fields still succeed and only genuine clashes raise a 409.
+        if (
+          input.expectedRowVersion !== undefined &&
+          input.expectedRowVersion !== existing.rowVersion
+        ) {
+          const history = await events.listForEntity(projectId, 'incident', incidentId);
+          const baseEvent = history.find(
+            (event) => event.payload.rowVersion === input.expectedRowVersion,
+          );
+
+          if (!baseEvent) {
+            throw AppError.versionConflict('Incident changed since you loaded it', {
+              expectedRowVersion: input.expectedRowVersion,
+              currentRowVersion: existing.rowVersion,
+              fieldDiff: diffFields(snapshotIncident(existing), patch),
+            });
+          }
+
+          const { merged, conflicts } = threeWayMerge(
+            baseEvent.payload,
+            patch,
+            snapshotIncident(existing),
+          );
+          if (conflicts.length > 0) {
+            throw AppError.versionConflict('Your changes conflict with a concurrent edit', {
+              expectedRowVersion: input.expectedRowVersion,
+              currentRowVersion: existing.rowVersion,
+              conflicts,
+              current: toIncidentDto(existing),
+            });
+          }
+          applied = merged;
+        }
+
+        // Fingerprint inputs may have moved; keep the recurring-issue identity honest.
+        const fingerprintInputsChanged =
+          'title' in applied || 'service' in applied || 'errorSignature' in applied;
+        const nextFingerprint = fingerprintInputsChanged
+          ? computeFingerprint({
+              title: (applied.title as string | undefined) ?? existing.title,
+              service: (applied.service as string | null | undefined) ?? existing.service,
+              errorSignature:
+                (applied.errorSignature as string | null | undefined) ?? existing.errorSignature,
+            })
+          : existing.fingerprint;
+
+        // `applied` only ever contains whitelisted columns (patch is built from the
+        // Zod-checked input, and merge output is a subset of patch ∪ base snapshot).
+        const dbPatch = {
+          ...(applied as unknown as Omit<IncidentPatch, 'updatedAt'>),
+          fingerprint: nextFingerprint,
+          updatedAt: new Date(),
+        } satisfies IncidentPatch;
+
+        const row = await txRepo.update(projectId, incidentId, dbPatch, existing.rowVersion);
+        if (!row) {
+          throw AppError.versionConflict('Incident was modified by someone else', {
+            expectedRowVersion: existing.rowVersion,
+          });
+        }
+
+        await events.append(
+          {
+            projectId,
+            type:
+              row.severity !== existing.severity ? 'incident.severity_changed' : 'incident.updated',
+            entityType: 'incident',
+            entityId: incidentId,
+            actorId,
+            occurredAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
+            idempotencyKey: input.idempotencyKey,
+            payload: {
+              ...snapshotIncident(row),
+              changes: diffFields(snapshotIncident(existing), applied),
+            },
+          },
+          tx,
         );
 
-        if (!baseEvent) {
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'update',
+          entityType: 'incident',
+          entityId: incidentId,
+          before: snapshotIncident(existing),
+          after: snapshotIncident(row),
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+        });
+
+        return row;
+      });
+
+      return toIncidentDto(updated);
+    },
+
+    async changeStatus(projectId, incidentId, input, actorId, context) {
+      const now = new Date();
+
+      const updated = await db.transaction(async (tx) => {
+        const txRepo = createIncidentsRepository(tx);
+        const existing = await txRepo.findById(projectId, incidentId);
+        if (!existing) throw AppError.notFound('Incident', incidentId);
+
+        if (
+          input.expectedRowVersion !== undefined &&
+          input.expectedRowVersion !== existing.rowVersion
+        ) {
           throw AppError.versionConflict('Incident changed since you loaded it', {
             expectedRowVersion: input.expectedRowVersion,
             currentRowVersion: existing.rowVersion,
-            fieldDiff: diffFields(snapshotIncident(existing), patch),
-          });
-        }
-
-        const { merged, conflicts } = threeWayMerge(
-          baseEvent.payload,
-          patch,
-          snapshotIncident(existing),
-        );
-        if (conflicts.length > 0) {
-          throw AppError.versionConflict('Your changes conflict with a concurrent edit', {
-            expectedRowVersion: input.expectedRowVersion,
-            currentRowVersion: existing.rowVersion,
-            conflicts,
             current: toIncidentDto(existing),
           });
         }
-        applied = merged;
-      }
 
-      // Fingerprint inputs may have moved; keep the recurring-issue identity honest.
-      const fingerprintInputsChanged =
-        'title' in applied || 'service' in applied || 'errorSignature' in applied;
-      const nextFingerprint = fingerprintInputsChanged
-        ? computeFingerprint({
-            title: (applied.title as string | undefined) ?? existing.title,
-            service: (applied.service as string | null | undefined) ?? existing.service,
-            errorSignature:
-              (applied.errorSignature as string | null | undefined) ?? existing.errorSignature,
-          })
-        : existing.fingerprint;
+        const { patch, eventType } = planStatusChange(
+          existing,
+          input.status,
+          actorId,
+          input.note,
+          now,
+        );
 
-      // `applied` only ever contains whitelisted columns (patch is built from the
-      // Zod-checked input, and merge output is a subset of patch ∪ base snapshot).
-      const dbPatch = {
-        ...(applied as unknown as Omit<IncidentPatch, 'updatedAt'>),
-        fingerprint: nextFingerprint,
-        updatedAt: new Date(),
-      } satisfies IncidentPatch;
+        const row = await txRepo.update(
+          projectId,
+          incidentId,
+          { ...patch, updatedAt: now },
+          existing.rowVersion,
+        );
+        if (!row) {
+          throw AppError.versionConflict('Incident was modified by someone else', {
+            expectedRowVersion: existing.rowVersion,
+          });
+        }
 
-      const updated = await repo.update(projectId, incidentId, dbPatch, existing.rowVersion);
-      if (!updated) {
-        throw AppError.versionConflict('Incident was modified by someone else', {
-          expectedRowVersion: existing.rowVersion,
+        // A note attached to a transition is part of the record, so it is stored in
+        // the same append-only stream as free comments.
+        if (input.note) {
+          const txUpdates = createIncidentUpdatesRepository(tx);
+          await txUpdates.insert({
+            incidentId,
+            authorId: actorId,
+            kind: input.status === 'resolved' ? 'resolution_note' : 'timeline_note',
+            body: input.note,
+          });
+        }
+
+        await events.append(
+          {
+            projectId,
+            type: eventType,
+            entityType: 'incident',
+            entityId: incidentId,
+            actorId,
+            occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
+            idempotencyKey: input.idempotencyKey,
+            payload: {
+              ...snapshotIncident(row),
+              status: row.status,
+              fromStatus: existing.status,
+              note: input.note ?? null,
+            },
+          },
+          tx,
+        );
+
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'status_change',
+          entityType: 'incident',
+          entityId: incidentId,
+          before: { status: existing.status },
+          after: { status: row.status },
+          ip: context?.ip,
+          userAgent: context?.userAgent,
         });
-      }
 
-      const severityChanged = updated.severity !== existing.severity;
-      await events.append({
-        projectId,
-        type: severityChanged ? 'incident.severity_changed' : 'incident.updated',
-        entityType: 'incident',
-        entityId: incidentId,
-        actorId,
-        occurredAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
-        idempotencyKey: input.idempotencyKey,
-        payload: {
-          ...snapshotIncident(updated),
-          changes: diffFields(snapshotIncident(existing), applied),
-        },
+        return row;
       });
 
       return toIncidentDto(updated);
     },
 
-    async changeStatus(projectId, incidentId, input, actorId) {
-      const existing = await repo.findById(projectId, incidentId);
-      if (!existing) throw AppError.notFound('Incident', incidentId);
+    async addComment(projectId, incidentId, input, actorId, context) {
+      const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
 
-      if (
-        input.expectedRowVersion !== undefined &&
-        input.expectedRowVersion !== existing.rowVersion
-      ) {
-        throw AppError.versionConflict('Incident changed since you loaded it', {
-          expectedRowVersion: input.expectedRowVersion,
-          currentRowVersion: existing.rowVersion,
-          current: toIncidentDto(existing),
-        });
-      }
+      const inserted = await db.transaction(async (tx) => {
+        const txRepo = createIncidentsRepository(tx);
+        const incident = await txRepo.findById(projectId, incidentId);
+        if (!incident) throw AppError.notFound('Incident', incidentId);
 
-      const now = new Date();
-      const { patch, eventType } = planStatusChange(
-        existing,
-        input.status,
-        actorId,
-        input.note,
-        now,
-      );
-
-      const updated = await repo.update(
-        projectId,
-        incidentId,
-        { ...patch, updatedAt: now },
-        existing.rowVersion,
-      );
-      if (!updated) {
-        throw AppError.versionConflict('Incident was modified by someone else', {
-          expectedRowVersion: existing.rowVersion,
-        });
-      }
-
-      // A note attached to a transition is part of the record, so it is stored in
-      // the same append-only stream as free comments.
-      if (input.note) {
-        await updatesRepo.insert({
+        const txUpdates = createIncidentUpdatesRepository(tx);
+        const comment = await txUpdates.insert({
           incidentId,
           authorId: actorId,
-          kind: input.status === 'resolved' ? 'resolution_note' : 'timeline_note',
-          body: input.note,
+          kind: input.kind,
+          body: input.body,
+          occurredAt,
         });
-      }
 
-      await events.append({
-        projectId,
-        type: eventType,
-        entityType: 'incident',
-        entityId: incidentId,
-        actorId,
-        occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
-        idempotencyKey: input.idempotencyKey,
-        payload: {
-          ...snapshotIncident(updated),
-          status: updated.status,
-          fromStatus: existing.status,
-          note: input.note ?? null,
-        },
-      });
+        await events.append(
+          {
+            projectId,
+            type: 'incident.update_added',
+            entityType: 'incident',
+            entityId: incidentId,
+            actorId,
+            occurredAt,
+            idempotencyKey: input.idempotencyKey,
+            payload: { updateId: comment.id, kind: comment.kind },
+          },
+          tx,
+        );
 
-      return toIncidentDto(updated);
-    },
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'update',
+          entityType: 'incident_update',
+          entityId: comment.id,
+          after: { kind: comment.kind, body: comment.body },
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+        });
 
-    async addComment(projectId, incidentId, input, actorId) {
-      const incident = await repo.findById(projectId, incidentId);
-      if (!incident) throw AppError.notFound('Incident', incidentId);
-
-      const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
-      const inserted = await updatesRepo.insert({
-        incidentId,
-        authorId: actorId,
-        kind: input.kind,
-        body: input.body,
-        occurredAt,
-      });
-
-      await events.append({
-        projectId,
-        type: 'incident.update_added',
-        entityType: 'incident',
-        entityId: incidentId,
-        actorId,
-        occurredAt,
-        idempotencyKey: input.idempotencyKey,
-        payload: { updateId: inserted.id, kind: inserted.kind },
+        return comment;
       });
 
       // The comment page needs the author's display name, which the write path does

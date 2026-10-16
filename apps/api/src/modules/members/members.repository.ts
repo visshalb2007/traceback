@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { ProjectRole } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { projectMembers, projects, users } from '../../db/schema';
 import type { ProjectMemberRow } from '../../db/schema';
 
@@ -18,7 +18,7 @@ export interface MemberWithUser {
  * Membership persistence. The policy layer only needs `findRole`; member
  * management (invite/update/remove) is layered on top by the members service.
  */
-export function createMembersRepository(db: Database) {
+export function createMembersRepository(db: DbExecutor) {
   return {
     async findRole(projectId: string, userId: string): Promise<ProjectRole | undefined> {
       const [row] = await db

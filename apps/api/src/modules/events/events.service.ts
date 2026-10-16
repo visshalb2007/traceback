@@ -1,5 +1,5 @@
 import type { Event, EventEntityType, EventSource, EventType } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import type { EventRow } from '../../db/schema';
 import { createEventsRepository, type EventsRepository } from './events.repository';
 
@@ -64,18 +64,23 @@ export function toEventDto(row: EventRow): Event {
 }
 
 export interface EventsService {
-  append(input: AppendEventInput): Promise<AppendEventResult>;
+  /**
+   * Appends an event. Pass `executor` (a transaction handle) to write the event in
+   * the same transaction as the state change it describes.
+   */
+  append(input: AppendEventInput, executor?: DbExecutor): Promise<AppendEventResult>;
   /** Reads back an existing event without inserting (used by replay paths). */
   find(projectId: string, idempotencyKey: string): Promise<Event | undefined>;
   /** Full write-ordered history for one entity, newest first. */
   listForEntity(projectId: string, entityType: EventEntityType, entityId: string): Promise<Event[]>;
 }
 
-export function createEventsService(db: Database, lateThresholdMs: number): EventsService {
+export function createEventsService(db: DbExecutor, lateThresholdMs: number): EventsService {
   const repo: EventsRepository = createEventsRepository(db);
 
   return {
-    async append(input) {
+    async append(input, executor) {
+      const target = executor ? createEventsRepository(executor) : repo;
       const receivedAt = new Date();
       const occurredAt =
         input.occurredAt instanceof Date
@@ -112,11 +117,11 @@ export function createEventsService(db: Database, lateThresholdMs: number): Even
       } satisfies Parameters<EventsRepository['insert']>[0];
 
       try {
-        return { event: toEventDto(await repo.insert(row)), replayed: false };
+        return { event: toEventDto(await target.insert(row)), replayed: false };
       } catch (error) {
         // 23505 = unique_violation on (project_id, idempotency_key).
         if (isUniqueViolation(error)) {
-          const existing = await repo.findByIdempotencyKey(input.projectId, idempotencyKey);
+          const existing = await target.findByIdempotencyKey(input.projectId, idempotencyKey);
           if (existing) {
             return { event: toEventDto(existing), replayed: true };
           }

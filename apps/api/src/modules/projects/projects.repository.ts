@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { ProjectRole } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { projectMembers, projects } from '../../db/schema';
 import type { NewProjectRow, ProjectRow } from '../../db/schema';
 
@@ -24,7 +24,7 @@ export interface UpdateProjectPatch {
   updatedAt: Date;
 }
 
-export function createProjectsRepository(db: Database) {
+export function createProjectsRepository(db: DbExecutor) {
   return {
     /**
      * Project + owner membership are created together: a project without an owner

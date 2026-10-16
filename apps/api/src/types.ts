@@ -12,6 +12,7 @@ import type { ProjectRole } from '@traceback/shared';
 import type { AppEnv } from './env';
 import type { ProjectRow } from './db/schema';
 import type { Action } from './lib/policy';
+import type { AuditService } from './modules/audit/audit.service';
 import type { AuthService } from './modules/auth/auth.service';
 import type { EventsService } from './modules/events/events.service';
 import type { MembersRepository } from './modules/members/members.repository';
@@ -53,6 +54,8 @@ declare module 'fastify' {
     membersRepository: MembersRepository;
     /** Append-only event store; the source of truth for every timeline. */
     events: EventsService;
+    /** Read-side of the immutable audit log. */
+    audit: AuditService;
     /** preHandler factory that resolves the caller's project role and enforces the policy matrix. */
     authorize: (action: Action) => preHandlerAsyncHookHandler;
   }

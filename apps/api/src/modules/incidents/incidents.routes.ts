@@ -34,6 +34,15 @@ const incidentParamsSchema = projectIdParamSchema.extend({
 
 const updateListSchema = z.object({ items: z.array(incidentUpdateSchema) });
 
+/** Request-scoped facts copied onto every audit row written by this module. */
+function auditContext(request: {
+  ip: string;
+  headers: Record<string, string | string[] | undefined>;
+}): { ip: string; userAgent: string | null } {
+  const agent = request.headers['user-agent'];
+  return { ip: request.ip, userAgent: typeof agent === 'string' ? agent : null };
+}
+
 export async function incidentsRoutes(app: AppServer): Promise<void> {
   const service = createIncidentsService(app.db, app.events);
 
@@ -52,6 +61,7 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         request.params.projectId,
         request.body,
         request.auth!.userId,
+        auditContext(request),
       );
 
       if (result.replayed) {
@@ -125,6 +135,7 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         request.params.incidentId,
         input,
         request.auth!.userId,
+        auditContext(request),
       );
     },
   );
@@ -145,6 +156,7 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         request.params.incidentId,
         request.body,
         request.auth!.userId,
+        auditContext(request),
       ),
   );
 
@@ -164,6 +176,7 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         request.params.incidentId,
         request.body,
         request.auth!.userId,
+        auditContext(request),
       );
       void reply
         .status(201)

@@ -1,5 +1,5 @@
 import { and, eq, isNull } from 'drizzle-orm';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { refreshTokens, users } from '../../db/schema';
 import type { NewUserRow, RefreshTokenRow, UserRow } from '../../db/schema';
 
@@ -21,7 +21,7 @@ export interface CreateRefreshTokenInput {
  * Pure persistence. No hashing, no token logic, no authorization — those live in
  * the service. Every method takes/returns rows or plain values.
  */
-export function createAuthRepository(db: Database) {
+export function createAuthRepository(db: DbExecutor) {
   return {
     async createUser(input: CreateUserInput): Promise<UserRow> {
       const [row] = await db

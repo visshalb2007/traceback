@@ -1,6 +1,6 @@
 import { and, arrayContains, desc, eq, lt, or } from 'drizzle-orm';
 import type { ChangeType } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { changes, deployments } from '../../db/schema';
 import type { ChangeRow, NewChangeRow } from '../../db/schema';
 
@@ -15,7 +15,7 @@ export interface ChangeListFilters {
   cursorId?: string | undefined;
 }
 
-export function createChangesRepository(db: Database) {
+export function createChangesRepository(db: DbExecutor) {
   return {
     async insert(row: NewChangeRow): Promise<ChangeRow> {
       const [inserted] = await db.insert(changes).values(row).returning();

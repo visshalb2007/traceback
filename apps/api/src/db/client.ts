@@ -5,6 +5,14 @@ import * as schema from './schema';
 export type Database = PostgresJsDatabase<typeof schema>;
 export type Sql = ReturnType<typeof postgres>;
 
+/**
+ * Drizzle's transaction handle exposes the same query builder as the root database,
+ * so repositories accept either. That is what lets a mutation and its audit-log row
+ * (and its event) be written in one transaction.
+ */
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type DbExecutor = Database | Transaction;
+
 export interface DbHandle {
   db: Database;
   sql: Sql;

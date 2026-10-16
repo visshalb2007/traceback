@@ -1,6 +1,6 @@
 import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 import type { DeploymentStatus, Environment } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { deployments } from '../../db/schema';
 import type { DeploymentRow, NewDeploymentRow } from '../../db/schema';
 
@@ -27,7 +27,7 @@ export interface DeploymentPatch {
   updatedAt: Date;
 }
 
-export function createDeploymentsRepository(db: Database) {
+export function createDeploymentsRepository(db: DbExecutor) {
   return {
     async insert(row: NewDeploymentRow): Promise<DeploymentRow> {
       const [inserted] = await db.insert(deployments).values(row).returning();

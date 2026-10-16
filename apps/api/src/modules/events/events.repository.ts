@@ -1,10 +1,10 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { EventEntityType } from '@traceback/shared';
-import type { Database } from '../../db/client';
+import type { DbExecutor } from '../../db/client';
 import { events } from '../../db/schema';
 import type { EventRow, NewEventRow } from '../../db/schema';
 
-export function createEventsRepository(db: Database) {
+export function createEventsRepository(db: DbExecutor) {
   return {
     async insert(row: NewEventRow): Promise<EventRow> {
       const [inserted] = await db.insert(events).values(row).returning();
