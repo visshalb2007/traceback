@@ -21,8 +21,17 @@ const commonErrors = {
 const memberListSchema = z.object({ items: z.array(memberSchema) });
 const memberParamsSchema = projectIdParamSchema.extend({ userId: uuidSchema });
 
+/** Request-scoped facts copied onto every audit row written by this module. */
+function auditContext(request: {
+  ip: string;
+  headers: Record<string, string | string[] | undefined>;
+}): { ip: string; userAgent: string | null } {
+  const agent = request.headers['user-agent'];
+  return { ip: request.ip, userAgent: typeof agent === 'string' ? agent : null };
+}
+
 export async function membersRoutes(app: AppServer): Promise<void> {
-  const service = createMembersService(app.db);
+  const service = createMembersService(app.db, app.events);
 
   app.get(
     '/projects/:projectId/members',
@@ -47,10 +56,15 @@ export async function membersRoutes(app: AppServer): Promise<void> {
       },
     },
     async (request, reply) => {
-      const member = await service.invite(request.params.projectId, request.body, {
-        userId: request.auth!.userId,
-        role: request.projectRole!,
-      });
+      const member = await service.invite(
+        request.params.projectId,
+        request.body,
+        {
+          userId: request.auth!.userId,
+          role: request.projectRole!,
+        },
+        auditContext(request),
+      );
       void reply.status(201).header('location', `/api/v1/projects/${member.projectId}/members`);
       return member;
     },
@@ -67,10 +81,16 @@ export async function membersRoutes(app: AppServer): Promise<void> {
       },
     },
     async (request) =>
-      service.updateRole(request.params.projectId, request.params.userId, request.body.role, {
-        userId: request.auth!.userId,
-        role: request.projectRole!,
-      }),
+      service.updateRole(
+        request.params.projectId,
+        request.params.userId,
+        request.body.role,
+        {
+          userId: request.auth!.userId,
+          role: request.projectRole!,
+        },
+        auditContext(request),
+      ),
   );
 
   app.delete(
@@ -83,10 +103,15 @@ export async function membersRoutes(app: AppServer): Promise<void> {
       },
     },
     async (request, reply) => {
-      await service.remove(request.params.projectId, request.params.userId, {
-        userId: request.auth!.userId,
-        role: request.projectRole!,
-      });
+      await service.remove(
+        request.params.projectId,
+        request.params.userId,
+        {
+          userId: request.auth!.userId,
+          role: request.projectRole!,
+        },
+        auditContext(request),
+      );
       return reply.status(204).send(null);
     },
   );
