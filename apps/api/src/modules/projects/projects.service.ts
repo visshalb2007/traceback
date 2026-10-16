@@ -8,6 +8,9 @@ import type {
 import type { Database } from '../../db/client';
 import type { ProjectRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
+import type { AuditContext } from '../audit/audit.service';
+import { writeAudit } from '../audit/audit.service';
+import type { EventsService } from '../events/events.service';
 import { createProjectsRepository, type ProjectsRepository } from './projects.repository';
 
 export function toProjectDto(row: ProjectRow): Project {
@@ -38,14 +41,23 @@ export function slugify(value: string): string {
 }
 
 export interface ProjectsService {
-  create(input: CreateProjectInput, actorId: string): Promise<ProjectWithRoleDto>;
+  create(
+    input: CreateProjectInput,
+    actorId: string,
+    context?: AuditContext,
+  ): Promise<ProjectWithRoleDto>;
   list(userId: string): Promise<ProjectWithRoleDto[]>;
   get(projectId: string, role: ProjectRole): Promise<ProjectWithRoleDto>;
-  update(projectId: string, input: UpdateProjectInput): Promise<Project>;
-  remove(projectId: string): Promise<void>;
+  update(
+    projectId: string,
+    input: UpdateProjectInput,
+    actorId: string | null,
+    context?: AuditContext,
+  ): Promise<Project>;
+  remove(projectId: string, actorId: string | null, context?: AuditContext): Promise<void>;
 }
 
-export function createProjectsService(db: Database): ProjectsService {
+export function createProjectsService(db: Database, events: EventsService): ProjectsService {
   const repo: ProjectsRepository = createProjectsRepository(db);
 
   async function allocateSlug(base: string): Promise<string> {
@@ -58,7 +70,7 @@ export function createProjectsService(db: Database): ProjectsService {
   }
 
   return {
-    async create(input, actorId) {
+    async create(input, actorId, context) {
       const base = slugify(input.slug ?? input.name);
 
       let slug = base;
@@ -71,12 +83,40 @@ export function createProjectsService(db: Database): ProjectsService {
         slug = await allocateSlug(base);
       }
 
-      const project = await repo.create({
-        name: input.name,
-        slug,
-        description: input.description ?? null,
-        repositoryUrl: input.repositoryUrl ?? null,
-        createdBy: actorId,
+      const project = await db.transaction(async (tx) => {
+        const txRepo = createProjectsRepository(tx);
+        const created = await txRepo.create({
+          name: input.name,
+          slug,
+          description: input.description ?? null,
+          repositoryUrl: input.repositoryUrl ?? null,
+          createdBy: actorId,
+        });
+
+        await events.append(
+          {
+            projectId: created.id,
+            type: 'project.created',
+            entityType: 'project',
+            entityId: created.id,
+            actorId,
+            payload: { name: created.name, slug: created.slug },
+          },
+          tx,
+        );
+
+        await writeAudit(tx, {
+          projectId: created.id,
+          actorId,
+          action: 'create',
+          entityType: 'project',
+          entityId: created.id,
+          after: toProjectDto(created) as unknown as Record<string, unknown>,
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+        });
+
+        return created;
       });
 
       return { ...toProjectDto(project), role: 'owner' };
@@ -93,44 +133,102 @@ export function createProjectsService(db: Database): ProjectsService {
       return { ...toProjectDto(project), role };
     },
 
-    async update(projectId, input) {
-      const existing = await repo.findById(projectId);
-      if (!existing) throw AppError.notFound('Project', projectId);
+    async update(projectId, input, actorId, context) {
+      const updated = await db.transaction(async (tx) => {
+        const txRepo = createProjectsRepository(tx);
+        const existing = await txRepo.findById(projectId);
+        if (!existing) throw AppError.notFound('Project', projectId);
 
-      const { rowVersion, ...patch } = input;
-      const expected = rowVersion ?? existing.rowVersion;
+        const { rowVersion, ...patch } = input;
+        const expected = rowVersion ?? existing.rowVersion;
 
-      if (expected !== existing.rowVersion) {
-        throw AppError.versionConflict('Project was modified by someone else', {
-          expectedRowVersion: expected,
-          currentRowVersion: existing.rowVersion,
-          current: toProjectDto(existing),
+        if (expected !== existing.rowVersion) {
+          throw AppError.versionConflict('Project was modified by someone else', {
+            expectedRowVersion: expected,
+            currentRowVersion: existing.rowVersion,
+            current: toProjectDto(existing),
+          });
+        }
+
+        const row = await txRepo.update(
+          projectId,
+          {
+            ...(patch.name === undefined ? {} : { name: patch.name }),
+            ...(patch.description === undefined ? {} : { description: patch.description }),
+            ...(patch.repositoryUrl === undefined ? {} : { repositoryUrl: patch.repositoryUrl }),
+            updatedAt: new Date(),
+          },
+          expected,
+        );
+
+        if (!row) {
+          throw AppError.versionConflict('Project was modified by someone else', {
+            expectedRowVersion: expected,
+          });
+        }
+
+        await events.append(
+          {
+            projectId,
+            type: 'project.updated',
+            entityType: 'project',
+            entityId: projectId,
+            actorId,
+            payload: { changes: Object.keys(patch) },
+          },
+          tx,
+        );
+
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'update',
+          entityType: 'project',
+          entityId: projectId,
+          before: toProjectDto(existing) as unknown as Record<string, unknown>,
+          after: toProjectDto(row) as unknown as Record<string, unknown>,
+          ip: context?.ip,
+          userAgent: context?.userAgent,
         });
-      }
 
-      const updated = await repo.update(
-        projectId,
-        {
-          ...(patch.name === undefined ? {} : { name: patch.name }),
-          ...(patch.description === undefined ? {} : { description: patch.description }),
-          ...(patch.repositoryUrl === undefined ? {} : { repositoryUrl: patch.repositoryUrl }),
-          updatedAt: new Date(),
-        },
-        expected,
-      );
-
-      if (!updated) {
-        throw AppError.versionConflict('Project was modified by someone else', {
-          expectedRowVersion: expected,
-        });
-      }
+        return row;
+      });
 
       return toProjectDto(updated);
     },
 
-    async remove(projectId) {
-      const deleted = await repo.softDelete(projectId, new Date());
-      if (!deleted) throw AppError.notFound('Project', projectId);
+    async remove(projectId, actorId, context) {
+      await db.transaction(async (tx) => {
+        const txRepo = createProjectsRepository(tx);
+        const existing = await txRepo.findById(projectId);
+        if (!existing) throw AppError.notFound('Project', projectId);
+
+        const deleted = await txRepo.softDelete(projectId, new Date());
+        if (!deleted) throw AppError.notFound('Project', projectId);
+
+        await events.append(
+          {
+            projectId,
+            type: 'project.deleted',
+            entityType: 'project',
+            entityId: projectId,
+            actorId,
+            payload: { slug: existing.slug },
+          },
+          tx,
+        );
+
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'delete',
+          entityType: 'project',
+          entityId: projectId,
+          before: toProjectDto(existing) as unknown as Record<string, unknown>,
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+        });
+      });
     },
   };
 }

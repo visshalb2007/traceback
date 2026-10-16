@@ -22,8 +22,17 @@ const projectListSchema = z.object({ items: z.array(projectWithRoleSchema) });
 
 export const projectIdParamSchema = z.object({ projectId: idParamSchema.shape.id });
 
+/** Request-scoped facts copied onto every audit row written by this module. */
+function auditContext(request: {
+  ip: string;
+  headers: Record<string, string | string[] | undefined>;
+}): { ip: string; userAgent: string | null } {
+  const agent = request.headers['user-agent'];
+  return { ip: request.ip, userAgent: typeof agent === 'string' ? agent : null };
+}
+
 export async function projectsRoutes(app: AppServer): Promise<void> {
-  const service = createProjectsService(app.db);
+  const service = createProjectsService(app.db, app.events);
 
   app.post(
     '/projects',
@@ -35,7 +44,11 @@ export async function projectsRoutes(app: AppServer): Promise<void> {
       },
     },
     async (request, reply) => {
-      const project = await service.create(request.body, request.auth!.userId);
+      const project = await service.create(
+        request.body,
+        request.auth!.userId,
+        auditContext(request),
+      );
       void reply.status(201).header('location', `/api/v1/projects/${project.id}`);
       return project;
     },
@@ -72,7 +85,13 @@ export async function projectsRoutes(app: AppServer): Promise<void> {
         response: { 200: projectSchema, ...commonErrors },
       },
     },
-    async (request) => service.update(request.params.projectId, request.body),
+    async (request) =>
+      service.update(
+        request.params.projectId,
+        request.body,
+        request.auth!.userId,
+        auditContext(request),
+      ),
   );
 
   app.delete(
@@ -85,7 +104,7 @@ export async function projectsRoutes(app: AppServer): Promise<void> {
       },
     },
     async (request, reply) => {
-      await service.remove(request.params.projectId);
+      await service.remove(request.params.projectId, request.auth!.userId, auditContext(request));
       return reply.status(204).send(null);
     },
   );
