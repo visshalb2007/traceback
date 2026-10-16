@@ -1,0 +1,95 @@
+name: traceback
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: traceback-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: traceback
+      POSTGRES_PASSWORD: traceback
+      POSTGRES_DB: traceback
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U traceback -d traceback']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Throwaway database for integration tests: tmpfs-backed and wiped on restart.
+  db-test:
+    image: postgres:16-alpine
+    container_name: traceback-db-test
+    profiles: ['test']
+    environment:
+      POSTGRES_USER: traceback
+      POSTGRES_PASSWORD: traceback
+      POSTGRES_DB: traceback_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U traceback -d traceback_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot migration runner: `docker compose run --rm migrate`
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    profiles: ['tools']
+    command: ['pnpm', '--filter', '@traceback/api', 'db:migrate']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://traceback:traceback@db:5432/traceback
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: traceback-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      HOST: 0.0.0.0
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://traceback:traceback@db:5432/traceback
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-only-access-secret-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret-change-me}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      LATE_EVENT_THRESHOLD_MS: 300000
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    ports:
+      - '4000:4000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    container_name: traceback-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

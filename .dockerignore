@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/dist
+**/build
+**/coverage
+**/.turbo
+**/.git
+**/.github
+**/.husky
+**/*.md
+!apps/web/public/**
+**/.env
+**/.env.*
+!**/.env.example
+**/playwright-report
+**/test-results
+pnpm-lock.yaml.bak
