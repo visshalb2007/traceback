@@ -9,6 +9,7 @@ import { healthRoutes } from '../modules/health/health.routes';
 import { incidentsRoutes } from '../modules/incidents/incidents.routes';
 import { membersRoutes } from '../modules/members/members.routes';
 import { projectsRoutes } from '../modules/projects/projects.routes';
+import { realtimeRoutes } from '../modules/realtime/realtime.routes';
 import { timelineRoutes } from '../modules/timeline/timeline.routes';
 
 /**
@@ -30,6 +31,7 @@ export async function registerRoutes(app: AppServer): Promise<void> {
       await api.register(dashboardRoutes);
       await api.register(auditRoutes);
       await api.register(timelineRoutes);
+      await api.register(realtimeRoutes);
     },
     { prefix: '/api/v1' },
   );

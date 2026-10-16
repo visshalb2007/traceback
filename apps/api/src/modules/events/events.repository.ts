@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gt } from 'drizzle-orm';
 import type { EventEntityType } from '@traceback/shared';
 import type { DbExecutor } from '../../db/client';
 import { events } from '../../db/schema';
@@ -22,6 +22,33 @@ export function createEventsRepository(db: DbExecutor) {
         .where(and(eq(events.projectId, projectId), eq(events.idempotencyKey, idempotencyKey)))
         .limit(1);
       return row;
+    },
+
+    async findById(projectId: string, id: string): Promise<EventRow | undefined> {
+      const [row] = await db
+        .select()
+        .from(events)
+        .where(and(eq(events.projectId, projectId), eq(events.id, id)))
+        .limit(1);
+      return row;
+    },
+
+    /**
+     * Events with a greater sequence than the client last saw, oldest first. This is
+     * the SSE resume path: a reconnecting client sends `Last-Event-ID` and gets the
+     * gap replayed in write order.
+     */
+    async listAfterSequence(
+      projectId: string,
+      sequence: number,
+      limit: number,
+    ): Promise<EventRow[]> {
+      return db
+        .select()
+        .from(events)
+        .where(and(eq(events.projectId, projectId), gt(events.sequence, sequence)))
+        .orderBy(asc(events.sequence))
+        .limit(limit);
     },
 
     /** Late events recorded per project — the input for re-projection. */
