@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Toaster } from 'sonner';
+import { Providers } from '@/components/providers';
 import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-background">
         <ThemeProvider>
-          {children}
+          <Providers>{children}</Providers>
           <Toaster position="bottom-right" richColors closeButton />
         </ThemeProvider>
       </body>
