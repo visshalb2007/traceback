@@ -12,6 +12,7 @@ import { createLogger, newRequestId } from './logger';
 import { toErrorResponse } from './lib/errors';
 import { authPlugin } from './plugins/auth.plugin';
 import { dbPlugin } from './plugins/db.plugin';
+import { rbacPlugin } from './plugins/rbac.plugin';
 import { registerRoutes } from './routes';
 
 export interface BuildAppOptions {
@@ -52,6 +53,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
   await app.register(dbPlugin, { env });
 
   await app.register(authPlugin);
+
+  await app.register(rbacPlugin);
 
   app.setNotFoundHandler((request, reply) => {
     void reply.status(404).send({

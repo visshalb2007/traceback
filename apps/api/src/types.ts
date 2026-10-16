@@ -8,8 +8,12 @@ import type {
   RawServerDefault,
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import type { ProjectRole } from '@traceback/shared';
 import type { AppEnv } from './env';
+import type { ProjectRow } from './db/schema';
+import type { Action } from './lib/policy';
 import type { AuthService } from './modules/auth/auth.service';
+import type { MembersRepository } from './modules/members/members.repository';
 
 /**
  * The one Fastify instance type this codebase uses: Zod as the schema/validator
@@ -45,10 +49,17 @@ declare module 'fastify' {
     authService: AuthService;
     /** preHandler that populates `request.auth` or throws 401. */
     requireAuth: preHandlerAsyncHookHandler;
+    membersRepository: MembersRepository;
+    /** preHandler factory that resolves the caller's project role and enforces the policy matrix. */
+    authorize: (action: Action) => preHandlerAsyncHookHandler;
   }
 
   interface FastifyRequest {
     /** Attached by the auth plugin when a valid bearer token/key is present. */
     auth?: AuthContext;
+    /** Populated by `authorize()` once the caller's role has been resolved. */
+    projectRole?: ProjectRole;
+    /** Populated by `authorize()` with the (non-deleted) project row. */
+    project?: ProjectRow;
   }
 }
