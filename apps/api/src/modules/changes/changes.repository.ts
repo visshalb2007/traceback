@@ -1,4 +1,4 @@
-import { and, arrayContains, desc, eq, lt, or } from 'drizzle-orm';
+import { and, arrayContains, between, desc, eq, lt, or } from 'drizzle-orm';
 import type { ChangeType } from '@traceback/shared';
 import type { DbExecutor } from '../../db/client';
 import { changes, deployments } from '../../db/schema';
@@ -81,6 +81,16 @@ export function createChangesRepository(db: DbExecutor) {
         .where(and(eq(deployments.projectId, projectId), eq(deployments.id, deploymentId)))
         .limit(1);
       return Boolean(row);
+    },
+
+    /** Changes in a lookback window — the correlation engine's second candidate set. */
+    async listInWindow(projectId: string, from: Date, to: Date, limit = 200): Promise<ChangeRow[]> {
+      return db
+        .select()
+        .from(changes)
+        .where(and(eq(changes.projectId, projectId), between(changes.createdAt, from, to)))
+        .orderBy(desc(changes.createdAt))
+        .limit(limit);
     },
   };
 }

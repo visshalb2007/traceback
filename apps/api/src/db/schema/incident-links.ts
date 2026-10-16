@@ -45,6 +45,11 @@ export const incidentLinks = pgTable(
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** Raw per-signal contributions, stored so a stored suggestion stays explainable. */
+    signals: jsonb('signals')
+      .$type<Record<string, number>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     algorithmVersion: text('algorithm_version'),
     note: text('note'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),

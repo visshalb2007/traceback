@@ -272,13 +272,24 @@ export function scoreCandidate(
 export function rankCandidates(
   incident: IncidentFacts,
   candidates: CandidateFacts[],
-  context: CorrelationContext & { minScore?: number; limit?: number } = {},
+  options: CorrelationContext & {
+    minScore?: number;
+    limit?: number;
+    /** Per-candidate context, e.g. author-specific history, layered over the base context. */
+    contextFor?: (candidate: CandidateFacts, index: number) => CorrelationContext;
+  } = {},
 ): ScoredCandidate[] {
-  const minScore = context.minScore ?? 0.25;
-  const limit = context.limit ?? 5;
+  const minScore = options.minScore ?? 0.25;
+  const limit = options.limit ?? 5;
 
   return candidates
-    .map((candidate) => scoreCandidate(incident, candidate, context))
+    .map((candidate, index) =>
+      scoreCandidate(
+        incident,
+        candidate,
+        options.contextFor ? { ...options, ...options.contextFor(candidate, index) } : options,
+      ),
+    )
     .filter((scored) => scored.score >= minScore)
     .sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId))
     .slice(0, limit);

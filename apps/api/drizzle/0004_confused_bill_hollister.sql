@@ -1,0 +1,1 @@
+ALTER TABLE "incident_links" ADD COLUMN "signals" jsonb DEFAULT '{}'::jsonb NOT NULL;

@@ -200,6 +200,22 @@ describe('rankCandidates', () => {
     });
     expect(rankCandidates(incident(), [weak], { minScore: 0.5 })).toEqual([]);
   });
+
+  it('applies a per-candidate context so each author carries their own history', () => {
+    const middling = (entityId: string): CandidateFacts =>
+      deployment({ entityId, happenedAt: at('2026-01-02T00:00:00Z') });
+
+    const ranked = rankCandidates(incident(), [middling(ID.deployment), middling(ID.other)], {
+      minScore: 0,
+      contextFor: (candidate) => ({
+        authorHistory: candidate.entityId === ID.deployment ? 3 : 0,
+      }),
+    });
+
+    expect(first(ranked).entityId).toBe(ID.deployment);
+    expect(first(ranked).signalsDetail.authorHistory).toBe(1);
+    expect(second(ranked).signalsDetail.authorHistory).toBeUndefined();
+  });
 });
 
 describe('buildCorrelationResult', () => {
