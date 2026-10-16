@@ -1,4 +1,5 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
+import type { EventEntityType } from '@traceback/shared';
 import type { Database } from '../../db/client';
 import { events } from '../../db/schema';
 import type { EventRow, NewEventRow } from '../../db/schema';
@@ -32,6 +33,29 @@ export function createEventsRepository(db: Database) {
         .orderBy(events.occurredAt)
         .limit(1000)
         .then((rows) => rows.filter((row) => row.receivedAt >= since));
+    },
+
+    /**
+     * Full history for one entity, newest write first. Earlier payloads double as
+     * the "base" snapshot for three-way merges, so ordering is by write order
+     * (`sequence`), not by `occurred_at`.
+     */
+    async listForEntity(
+      projectId: string,
+      entityType: EventEntityType,
+      entityId: string,
+    ): Promise<EventRow[]> {
+      return db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.projectId, projectId),
+            eq(events.entityType, entityType),
+            eq(events.entityId, entityId),
+          ),
+        )
+        .orderBy(desc(events.sequence));
     },
   };
 }

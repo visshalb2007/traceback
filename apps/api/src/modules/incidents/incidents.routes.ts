@@ -4,8 +4,10 @@ import {
   errorResponseSchema,
   incidentQuerySchema,
   incidentSchema,
+  updateIncidentSchema,
 } from '@traceback/shared';
 import type { AppServer } from '../../types';
+import { parseIfMatch } from '../../lib/http';
 import { createIncidentsService } from './incidents.service';
 import { projectIdParamSchema } from '../projects/projects.routes';
 
@@ -92,5 +94,33 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
       },
     },
     async (request) => service.get(request.params.projectId, request.params.incidentId),
+  );
+
+  app.patch(
+    '/projects/:projectId/incidents/:incidentId',
+    {
+      preHandler: [app.requireAuth, app.authorize('incident:update')],
+      schema: {
+        params: incidentParamsSchema,
+        body: updateIncidentSchema,
+        response: { 200: incidentSchema, ...commonErrors },
+      },
+    },
+    async (request) => {
+      // Accept the optimistic-concurrency version from the body or an `If-Match`
+      // header; the body wins if both are present.
+      const ifMatch = parseIfMatch(request.headers['if-match']);
+      const input =
+        request.body.expectedRowVersion === undefined && ifMatch !== undefined
+          ? { ...request.body, expectedRowVersion: ifMatch }
+          : request.body;
+
+      return service.update(
+        request.params.projectId,
+        request.params.incidentId,
+        input,
+        request.auth!.userId,
+      );
+    },
   );
 }

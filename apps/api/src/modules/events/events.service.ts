@@ -67,6 +67,8 @@ export interface EventsService {
   append(input: AppendEventInput): Promise<AppendEventResult>;
   /** Reads back an existing event without inserting (used by replay paths). */
   find(projectId: string, idempotencyKey: string): Promise<Event | undefined>;
+  /** Full write-ordered history for one entity, newest first. */
+  listForEntity(projectId: string, entityType: EventEntityType, entityId: string): Promise<Event[]>;
 }
 
 export function createEventsService(db: Database, lateThresholdMs: number): EventsService {
@@ -126,6 +128,11 @@ export function createEventsService(db: Database, lateThresholdMs: number): Even
     async find(projectId, idempotencyKey) {
       const row = await repo.findByIdempotencyKey(projectId, idempotencyKey);
       return row ? toEventDto(row) : undefined;
+    },
+
+    async listForEntity(projectId, entityType, entityId) {
+      const rows = await repo.listForEntity(projectId, entityType, entityId);
+      return rows.map(toEventDto);
     },
   };
 }

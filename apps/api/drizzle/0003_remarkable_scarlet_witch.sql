@@ -1,0 +1,1 @@
+ALTER TYPE "public"."event_type" ADD VALUE 'incident.updated' BEFORE 'incident.status_changed';

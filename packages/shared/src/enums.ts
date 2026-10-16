@@ -105,6 +105,7 @@ export const eventTypeSchema = z.enum([
   'deployment.enriched',
   'change.recorded',
   'incident.created',
+  'incident.updated',
   'incident.status_changed',
   'incident.severity_changed',
   'incident.assignee_added',
