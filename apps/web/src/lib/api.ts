@@ -16,6 +16,7 @@ import type {
   Deployment,
   DeploymentCompleteness,
   DeploymentStatus,
+  EnrichDeploymentInput,
   Environment,
   EventEntityType,
   EventSource,
@@ -190,11 +191,7 @@ export const deploymentsApi = {
       method: 'POST',
       body: input,
     }),
-  enrich: (
-    projectId: string,
-    deploymentId: string,
-    input: Partial<RecordDeploymentInput> & { rowVersion?: number },
-  ) =>
+  enrich: (projectId: string, deploymentId: string, input: EnrichDeploymentInput) =>
     apiRequest<DeploymentResponse>(`/api/v1/projects/${projectId}/deployments/${deploymentId}`, {
       method: 'PATCH',
       body: input,
