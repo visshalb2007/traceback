@@ -7,7 +7,13 @@ describe('health endpoint', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp({ env: loadEnv({ NODE_ENV: 'test' } as NodeJS.ProcessEnv) });
+    app = await buildApp({
+      env: loadEnv({
+        NODE_ENV: 'test',
+        // Point at a port nothing listens on so the check is deterministic.
+        DATABASE_URL: 'postgres://traceback:traceback@localhost:59999/traceback',
+      } as NodeJS.ProcessEnv),
+    });
     await app.ready();
   });
 
@@ -15,14 +21,19 @@ describe('health endpoint', () => {
     await app.close();
   });
 
-  it('reports ok with a skipped database check', async () => {
+  it('reports ok and includes a database check', async () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.status).toBe('ok');
     expect(body.service).toBe('traceback-api');
-    expect(body.checks.database).toBe('skipped');
+    expect(['up', 'down']).toContain(body.checks.database);
+  });
+
+  it('reports the database as down when Postgres is unreachable', async () => {
+    const response = await app.inject({ method: 'GET', url: '/health' });
+    expect(response.json().checks.database).toBe('down');
   });
 
   it('returns the canonical error envelope for unknown routes', async () => {

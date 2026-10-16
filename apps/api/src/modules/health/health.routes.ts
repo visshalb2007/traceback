@@ -5,9 +5,9 @@ import { healthResponseSchema } from './health.schemas';
 const startedAt = Date.now();
 
 /**
- * Liveness probe. The database check is wired in by the db plugin (see commit 8)
- * via `app.dbHealthcheck` and reports 'skipped' while no database is attached,
- * which keeps the scaffold and its tests runnable without Postgres.
+ * Liveness probe: always 200 while the process is up. The database check is
+ * informational — a `down` database does not make the process unhealthy, it makes
+ * it *not ready*, which the deployment platform's own readiness gate handles.
  */
 export async function healthRoutes(app: AppServer): Promise<void> {
   app.get(
@@ -20,7 +20,7 @@ export async function healthRoutes(app: AppServer): Promise<void> {
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
       timestamp: new Date().toISOString(),
       checks: {
-        database: app.dbHealthcheck ? await app.dbHealthcheck() : 'skipped',
+        database: await app.dbHealthcheck(),
       },
     }),
   );

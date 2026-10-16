@@ -1,0 +1,2 @@
+Hand-written migrations (0000_*.sql) and drizzle-kit snapshots live here.
+Run `pnpm --filter @traceback/api db:generate` after changing the schema.

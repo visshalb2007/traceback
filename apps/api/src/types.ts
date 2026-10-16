@@ -36,11 +36,6 @@ export interface AuthContext {
 }
 
 declare module 'fastify' {
-  interface FastifyInstance {
-    /** Attached by the db plugin; absent when running without a database. */
-    dbHealthcheck: () => Promise<'up' | 'down' | 'skipped'>;
-  }
-
   interface FastifyRequest {
     /** Attached by the auth plugin when a valid bearer token/key is present. */
     auth?: AuthContext;

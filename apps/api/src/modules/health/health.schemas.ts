@@ -7,13 +7,7 @@ export const healthResponseSchema = z.object({
   uptimeSeconds: z.number(),
   timestamp: z.string(),
   checks: z.object({
-    database: z.enum(['up', 'down', 'skipped']),
+    database: z.enum(['up', 'down']),
   }),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
-
-export const readinessResponseSchema = z.object({
-  status: z.enum(['ready', 'degraded']),
-  checks: z.record(z.string(), z.enum(['up', 'down', 'skipped'])),
-});
-export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;

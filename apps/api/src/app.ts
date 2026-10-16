@@ -10,6 +10,7 @@ import type { AppServer } from './types';
 import { loadEnv, type AppEnv } from './env';
 import { createLogger, newRequestId } from './logger';
 import { toErrorResponse } from './lib/errors';
+import { dbPlugin } from './plugins/db.plugin';
 import { registerRoutes } from './routes';
 
 export interface BuildAppOptions {
@@ -44,6 +45,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
     max: env.NODE_ENV === 'test' ? 100_000 : env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW,
   });
+
+  await app.register(dbPlugin, { env });
 
   app.setNotFoundHandler((request, reply) => {
     void reply.status(404).send({

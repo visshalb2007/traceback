@@ -23,6 +23,7 @@ const envSchema = z.object({
     .positive()
     .default(60 * 60 * 24 * 30),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
   LATE_EVENT_THRESHOLD_MS: z.coerce
     .number()
     .int()
