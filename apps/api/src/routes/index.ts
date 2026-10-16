@@ -1,6 +1,7 @@
 import type { AppServer } from '../types';
 import { authRoutes } from '../modules/auth/auth.routes';
 import { healthRoutes } from '../modules/health/health.routes';
+import { projectsRoutes } from '../modules/projects/projects.routes';
 
 /**
  * Every module exposes an async plugin so app.ts stays a flat, readable list of
@@ -8,5 +9,12 @@ import { healthRoutes } from '../modules/health/health.routes';
  */
 export async function registerRoutes(app: AppServer): Promise<void> {
   await app.register(healthRoutes);
-  await app.register(authRoutes, { prefix: '/api/v1' });
+
+  await app.register(
+    async (api) => {
+      await api.register(authRoutes);
+      await api.register(projectsRoutes);
+    },
+    { prefix: '/api/v1' },
+  );
 }
