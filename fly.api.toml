@@ -1,0 +1,34 @@
+# Fly.io config for the API. Deploy from the repo root so the monorepo context is
+# available to the Dockerfile:
+#
+#   fly launch --config fly.api.toml --no-deploy
+#   fly secrets set --config fly.api.toml DATABASE_URL=... JWT_ACCESS_SECRET=... JWT_REFRESH_SECRET=...
+#   fly deploy --config fly.api.toml
+app = 'traceback-api'
+primary_region = 'sin'
+
+[build]
+  dockerfile = 'apps/api/Dockerfile'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '4000'
+  HOST = '0.0.0.0'
+  LATE_EVENT_THRESHOLD_MS = '300000'
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[http_service.checks]]
+  interval = '15s'
+  timeout = '5s'
+  grace_period = '20s'
+  method = 'GET'
+  path = '/health'
+
+[deploy]
+  release_command = 'pnpm --filter @traceback/api db:migrate'

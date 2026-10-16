@@ -1,0 +1,50 @@
+# Render Blueprint: one Postgres, one API web service, one web service.
+# Create everything with: Dashboard -> New -> Blueprint -> point at this repo.
+databases:
+  - name: traceback-db
+    databaseName: traceback
+    user: traceback
+    plan: free
+    postgresMajorVersion: '16'
+
+services:
+  - type: web
+    name: traceback-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Migrations run from the same image (it keeps dev deps) before traffic shifts.
+    preDeployCommand: pnpm --filter @traceback/api db:migrate
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4000'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: traceback-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: https://traceback-web.onrender.com
+      - key: LATE_EVENT_THRESHOLD_MS
+        value: '300000'
+
+  - type: web
+    name: traceback-web
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      # Baked into the client bundle at build time, so it must be the public API URL.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://traceback-api.onrender.com
