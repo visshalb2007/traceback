@@ -1,5 +1,6 @@
 import type { AppServer } from '../types';
 import { authRoutes } from '../modules/auth/auth.routes';
+import { changesRoutes } from '../modules/changes/changes.routes';
 import { deploymentsRoutes } from '../modules/deployments/deployments.routes';
 import { healthRoutes } from '../modules/health/health.routes';
 import { membersRoutes } from '../modules/members/members.routes';
@@ -18,6 +19,7 @@ export async function registerRoutes(app: AppServer): Promise<void> {
       await api.register(projectsRoutes);
       await api.register(membersRoutes);
       await api.register(deploymentsRoutes);
+      await api.register(changesRoutes);
     },
     { prefix: '/api/v1' },
   );
