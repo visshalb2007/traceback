@@ -3,8 +3,10 @@ import type {
   CreateIncidentInput,
   Incident,
   IncidentCommentInput,
+  IncidentFingerprintGroup,
   IncidentUpdate,
   IncidentUpdateKind,
+  RecurringIncidentQuery,
   UpdateIncidentInput,
 } from '@traceback/shared';
 import type { Database } from '../../db/client';
@@ -24,6 +26,7 @@ import {
   type IncidentPatch,
   type IncidentsRepository,
   type IncidentSortKey,
+  type RecurringFingerprintRow,
   type SortOrder,
 } from './incidents.repository';
 
@@ -92,6 +95,21 @@ export interface IncidentListResult {
   nextCursor: string | null;
 }
 
+/** Map the GROUP BY row into the wire shape for the recurring-issues endpoint. */
+export function toFingerprintGroupDto(row: RecurringFingerprintRow): IncidentFingerprintGroup {
+  return {
+    fingerprint: row.fingerprint,
+    title: row.title,
+    service: row.service,
+    severity: row.severity,
+    count: row.count,
+    activeCount: row.active_count,
+    firstSeenAt: row.first_seen_at.toISOString(),
+    lastSeenAt: row.last_seen_at.toISOString(),
+    incidentIds: row.incident_ids,
+  };
+}
+
 export function toIncidentUpdateDto(
   row: IncidentUpdateRow,
   authorName: string | null,
@@ -158,6 +176,10 @@ export interface IncidentsService {
     context?: AuditContext,
   ): Promise<IncidentUpdate>;
   listUpdates(projectId: string, incidentId: string): Promise<IncidentUpdate[]>;
+  listRecurringFingerprints(
+    projectId: string,
+    filters: RecurringIncidentQuery,
+  ): Promise<IncidentFingerprintGroup[]>;
 }
 
 export function createIncidentsService(db: Database, events: EventsService): IncidentsService {
@@ -220,6 +242,32 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
           },
           tx,
         );
+
+        // Same fingerprint as an earlier incident means the problem came back; the
+        // recurrence is worth its own event so the timeline can show "seen before".
+        const previous = await txRepo.listByFingerprint(
+          projectId,
+          inserted.fingerprint,
+          inserted.id,
+        );
+        if (previous.length > 0) {
+          await events.append(
+            {
+              projectId,
+              type: 'fingerprint.grouped',
+              entityType: 'incident',
+              entityId: inserted.id,
+              actorId,
+              occurredAt,
+              payload: {
+                fingerprint: inserted.fingerprint,
+                occurrences: previous.length,
+                firstSeenAt: previous[previous.length - 1]?.startedAt.toISOString() ?? null,
+              },
+            },
+            tx,
+          );
+        }
 
         await writeAudit(tx, {
           projectId,
@@ -526,6 +574,15 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
           return toIncidentUpdateDto(row, withAuthor?.authorName ?? null);
         }),
       );
+    },
+
+    async listRecurringFingerprints(projectId, filters) {
+      const rows = await repo.listRecurringFingerprints(
+        projectId,
+        filters.minIncidents,
+        filters.limit,
+      );
+      return rows.map(toFingerprintGroupDto);
     },
   };
 }

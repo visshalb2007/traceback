@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { IncidentRow, IncidentUpdateRow } from '../../../db/schema';
-import { incidentPatch, snapshotIncident, toIncidentUpdateDto } from '../incidents.service';
+import {
+  incidentPatch,
+  snapshotIncident,
+  toFingerprintGroupDto,
+  toIncidentUpdateDto,
+} from '../incidents.service';
 
 function incidentRow(overrides: Partial<IncidentRow> = {}): IncidentRow {
   const now = new Date('2026-02-01T10:00:00.000Z');
@@ -72,6 +77,34 @@ describe('toIncidentUpdateDto', () => {
       body: 'Investigating',
       occurredAt: '2026-02-01T10:00:00.000Z',
       createdAt: '2026-02-01T10:00:00.000Z',
+    });
+  });
+});
+
+describe('toFingerprintGroupDto', () => {
+  it('maps the recurrence aggregation into the wire shape', () => {
+    const dto = toFingerprintGroupDto({
+      fingerprint: 'fp-1',
+      title: 'Checkout 500s',
+      service: 'checkout-api',
+      severity: 'sev1',
+      count: 4,
+      active_count: 2,
+      first_seen_at: new Date('2026-01-01T00:00:00.000Z'),
+      last_seen_at: new Date('2026-02-01T10:00:00.000Z'),
+      incident_ids: ['a', 'b'],
+    });
+
+    expect(dto).toEqual({
+      fingerprint: 'fp-1',
+      title: 'Checkout 500s',
+      service: 'checkout-api',
+      severity: 'sev1',
+      count: 4,
+      activeCount: 2,
+      firstSeenAt: '2026-01-01T00:00:00.000Z',
+      lastSeenAt: '2026-02-01T10:00:00.000Z',
+      incidentIds: ['a', 'b'],
     });
   });
 });

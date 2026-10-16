@@ -8,6 +8,22 @@ import type { IncidentRow, NewIncidentRow } from '../../db/schema';
 export type IncidentSortKey = 'startedAt' | 'updatedAt' | 'severity' | 'status';
 export type SortOrder = 'asc' | 'desc';
 
+/**
+ * One row of the recurrence aggregation: raw column names (snake_case) because it
+ * comes straight back from a hand-written GROUP BY rather than the query builder.
+ */
+export type RecurringFingerprintRow = {
+  fingerprint: string;
+  title: string;
+  service: string | null;
+  severity: IncidentSeverity;
+  count: number;
+  active_count: number;
+  first_seen_at: Date;
+  last_seen_at: Date;
+  incident_ids: string[];
+};
+
 export interface IncidentListFilters {
   status?: IncidentStatus | undefined;
   severity?: IncidentSeverity | undefined;
@@ -161,6 +177,37 @@ export function createIncidentsRepository(db: DbExecutor) {
         .from(incidents)
         .where(and(...conditions))
         .orderBy(desc(incidents.startedAt));
+    },
+
+    /**
+     * Recurring issues: fingerprints seen at least `minIncidents` times, newest
+     * activity first. `min(severity)` works because the enum is ordered with the
+     * most severe first, so it returns the worst severity the group has reached.
+     */
+    async listRecurringFingerprints(
+      projectId: string,
+      minIncidents: number,
+      limit: number,
+    ): Promise<RecurringFingerprintRow[]> {
+      const rows = await db.execute<RecurringFingerprintRow>(sql`
+        select
+          ${incidents.fingerprint} as fingerprint,
+          (array_agg(${incidents.title} order by ${incidents.startedAt} desc))[1] as title,
+          (array_agg(${incidents.service} order by ${incidents.startedAt} desc))[1] as service,
+          min(${incidents.severity}) as severity,
+          count(*)::int as count,
+          count(*) filter (where ${incidents.status} not in ('resolved', 'closed'))::int as active_count,
+          min(${incidents.startedAt}) as first_seen_at,
+          max(${incidents.startedAt}) as last_seen_at,
+          array_agg(${incidents.id} order by ${incidents.startedAt} desc) as incident_ids
+        from ${incidents}
+        where ${incidents.projectId} = ${projectId}
+        group by ${incidents.fingerprint}
+        having count(*) >= ${minIncidents}
+        order by count(*) desc, max(${incidents.startedAt}) desc
+        limit ${limit}
+      `);
+      return [...rows];
     },
 
     /** Any overlap with the affected components — used to widen correlation candidates. */

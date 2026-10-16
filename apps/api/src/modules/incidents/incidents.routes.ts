@@ -4,9 +4,11 @@ import {
   createIncidentSchema,
   errorResponseSchema,
   incidentCommentSchema,
+  incidentFingerprintGroupSchema,
   incidentQuerySchema,
   incidentSchema,
   incidentUpdateSchema,
+  recurringIncidentQuerySchema,
   updateIncidentSchema,
 } from '@traceback/shared';
 import type { AppServer } from '../../types';
@@ -33,6 +35,8 @@ const incidentParamsSchema = projectIdParamSchema.extend({
 });
 
 const updateListSchema = z.object({ items: z.array(incidentUpdateSchema) });
+
+const recurringListSchema = z.object({ items: z.array(incidentFingerprintGroupSchema) });
 
 /** Request-scoped facts copied onto every audit row written by this module. */
 function auditContext(request: {
@@ -97,6 +101,21 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         limit: request.query.limit,
         cursor: request.query.cursor,
       }),
+  );
+
+  app.get(
+    '/projects/:projectId/incidents/recurring',
+    {
+      preHandler: [app.requireAuth, app.authorize('incident:read')],
+      schema: {
+        params: projectIdParamSchema,
+        querystring: recurringIncidentQuerySchema,
+        response: { 200: recurringListSchema, ...commonErrors },
+      },
+    },
+    async (request) => ({
+      items: await service.listRecurringFingerprints(request.params.projectId, request.query),
+    }),
   );
 
   app.get(

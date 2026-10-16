@@ -154,3 +154,32 @@ export const incidentQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 export type IncidentQuery = z.infer<typeof incidentQuerySchema>;
+
+/**
+ * Recurring-issue detection: incidents that share a fingerprint are the same
+ * problem happening again. The grouping is derived on read (a fingerprint index
+ * makes it cheap) rather than materialised, so it can never drift from the
+ * incidents table.
+ */
+export const recurringIncidentQuerySchema = z.object({
+  /** Only return fingerprints seen at least this many times. */
+  minIncidents: z.coerce.number().int().min(2).max(100).default(2),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type RecurringIncidentQuery = z.infer<typeof recurringIncidentQuerySchema>;
+
+export const incidentFingerprintGroupSchema = z.object({
+  fingerprint: z.string(),
+  /** Title of the most recent incident in the group. */
+  title: z.string(),
+  service: z.string().nullable(),
+  /** Most severe severity seen across the group (sev1 is the most severe). */
+  severity: incidentSeveritySchema,
+  count: z.number().int(),
+  /** Incidents still open/investigating/mitigated — not yet resolved or closed. */
+  activeCount: z.number().int(),
+  firstSeenAt: z.string(),
+  lastSeenAt: z.string(),
+  incidentIds: z.array(uuidSchema),
+});
+export type IncidentFingerprintGroup = z.infer<typeof incidentFingerprintGroupSchema>;
