@@ -2,10 +2,13 @@ import type {
   ChangeIncidentStatusInput,
   CreateIncidentInput,
   Incident,
+  IncidentCommentInput,
+  IncidentUpdate,
+  IncidentUpdateKind,
   UpdateIncidentInput,
 } from '@traceback/shared';
 import type { Database } from '../../db/client';
-import type { IncidentRow } from '../../db/schema';
+import type { IncidentRow, IncidentUpdateRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
 import { encodeCursor, decodeCursor } from '../../lib/cursor';
 import { diffFields, threeWayMerge } from '../../lib/merge';
@@ -69,8 +72,9 @@ export function snapshotIncident(row: IncidentRow): Record<string, unknown> {
   };
 }
 
-/** Whitelist the client patch down to the mergeable fields. */
-export function incidentPatch(input: UpdateIncidentInput): Record<string, unknown> {
+/** Whitelist the client patch down to the mergeable fields. */ export function incidentPatch(
+  input: UpdateIncidentInput,
+): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
@@ -85,6 +89,22 @@ export function incidentPatch(input: UpdateIncidentInput): Record<string, unknow
 export interface IncidentListResult {
   items: Incident[];
   nextCursor: string | null;
+}
+
+export function toIncidentUpdateDto(
+  row: IncidentUpdateRow,
+  authorName: string | null,
+): IncidentUpdate {
+  return {
+    id: row.id,
+    incidentId: row.incidentId,
+    authorId: row.authorId,
+    authorName,
+    kind: row.kind as IncidentUpdateKind,
+    body: row.body,
+    occurredAt: row.occurredAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 /** The value stored in the keyset cursor for the active sort column. */
@@ -126,6 +146,13 @@ export interface IncidentsService {
     input: ChangeIncidentStatusInput,
     actorId: string | null,
   ): Promise<Incident>;
+  addComment(
+    projectId: string,
+    incidentId: string,
+    input: IncidentCommentInput,
+    actorId: string | null,
+  ): Promise<IncidentUpdate>;
+  listUpdates(projectId: string, incidentId: string): Promise<IncidentUpdate[]>;
 }
 
 export function createIncidentsService(db: Database, events: EventsService): IncidentsService {
@@ -365,6 +392,51 @@ export function createIncidentsService(db: Database, events: EventsService): Inc
       });
 
       return toIncidentDto(updated);
+    },
+
+    async addComment(projectId, incidentId, input, actorId) {
+      const incident = await repo.findById(projectId, incidentId);
+      if (!incident) throw AppError.notFound('Incident', incidentId);
+
+      const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
+      const inserted = await updatesRepo.insert({
+        incidentId,
+        authorId: actorId,
+        kind: input.kind,
+        body: input.body,
+        occurredAt,
+      });
+
+      await events.append({
+        projectId,
+        type: 'incident.update_added',
+        entityType: 'incident',
+        entityId: incidentId,
+        actorId,
+        occurredAt,
+        idempotencyKey: input.idempotencyKey,
+        payload: { updateId: inserted.id, kind: inserted.kind },
+      });
+
+      // The comment page needs the author's display name, which the write path does
+      // not otherwise have to hand.
+      const withAuthor = await updatesRepo.findByIdWithAuthor(incidentId, inserted.id);
+      return toIncidentUpdateDto(inserted, withAuthor?.authorName ?? null);
+    },
+
+    async listUpdates(projectId, incidentId) {
+      const incident = await repo.findById(projectId, incidentId);
+      if (!incident) throw AppError.notFound('Incident', incidentId);
+
+      const rows = await updatesRepo.listByIncident(incidentId);
+      // Author names are resolved per row; the list is intentionally unpaginated
+      // because an incident's discussion is bounded in practice.
+      return Promise.all(
+        rows.map(async (row) => {
+          const withAuthor = await updatesRepo.findByIdWithAuthor(incidentId, row.id);
+          return toIncidentUpdateDto(row, withAuthor?.authorName ?? null);
+        }),
+      );
     },
   };
 }

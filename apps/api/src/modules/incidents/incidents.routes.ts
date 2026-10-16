@@ -3,8 +3,10 @@ import {
   changeIncidentStatusSchema,
   createIncidentSchema,
   errorResponseSchema,
+  incidentCommentSchema,
   incidentQuerySchema,
   incidentSchema,
+  incidentUpdateSchema,
   updateIncidentSchema,
 } from '@traceback/shared';
 import type { AppServer } from '../../types';
@@ -29,6 +31,8 @@ const incidentListSchema = z.object({
 const incidentParamsSchema = projectIdParamSchema.extend({
   incidentId: z.string().uuid(),
 });
+
+const updateListSchema = z.object({ items: z.array(incidentUpdateSchema) });
 
 export async function incidentsRoutes(app: AppServer): Promise<void> {
   const service = createIncidentsService(app.db, app.events);
@@ -142,5 +146,46 @@ export async function incidentsRoutes(app: AppServer): Promise<void> {
         request.body,
         request.auth!.userId,
       ),
+  );
+
+  app.post(
+    '/projects/:projectId/incidents/:incidentId/updates',
+    {
+      preHandler: [app.requireAuth, app.authorize('incident:comment')],
+      schema: {
+        params: incidentParamsSchema,
+        body: incidentCommentSchema,
+        response: { 201: incidentUpdateSchema, ...commonErrors },
+      },
+    },
+    async (request, reply) => {
+      const update = await service.addComment(
+        request.params.projectId,
+        request.params.incidentId,
+        request.body,
+        request.auth!.userId,
+      );
+      void reply
+        .status(201)
+        .header(
+          'location',
+          `/api/v1/projects/${request.params.projectId}/incidents/${request.params.incidentId}/updates/${update.id}`,
+        );
+      return update;
+    },
+  );
+
+  app.get(
+    '/projects/:projectId/incidents/:incidentId/updates',
+    {
+      preHandler: [app.requireAuth, app.authorize('incident:read')],
+      schema: {
+        params: incidentParamsSchema,
+        response: { 200: updateListSchema, ...commonErrors },
+      },
+    },
+    async (request) => ({
+      items: await service.listUpdates(request.params.projectId, request.params.incidentId),
+    }),
   );
 }
