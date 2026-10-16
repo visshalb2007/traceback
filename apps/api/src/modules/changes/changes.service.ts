@@ -3,6 +3,8 @@ import type { Database } from '../../db/client';
 import type { ChangeRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
 import { encodeCursor, decodeCursor } from '../../lib/cursor';
+import type { AuditContext } from '../audit/audit.service';
+import { writeAudit } from '../audit/audit.service';
 import type { EventsService } from '../events/events.service';
 import { createChangesRepository, type ChangesRepository } from './changes.repository';
 
@@ -69,6 +71,7 @@ export interface ChangesService {
     projectId: string,
     input: RecordChangeInput,
     actorId: string | null,
+    context?: AuditContext,
   ): Promise<RecordChangeResult>;
   list(projectId: string, filters: ChangeListFilters): Promise<ChangeListResult>;
   get(projectId: string, changeId: string): Promise<Change>;
@@ -86,7 +89,7 @@ export function createChangesService(db: Database, events: EventsService): Chang
   };
 
   return {
-    async record(projectId, input, actorId) {
+    async record(projectId, input, actorId, context) {
       // An explicit idempotency key wins: it is the caller telling us "this is the
       // same submission", which is stronger evidence than a matching sha.
       if (input.idempotencyKey) {
@@ -102,46 +105,66 @@ export function createChangesService(db: Database, events: EventsService): Chang
       const bySha = await repo.findBySha(projectId, input.sha);
       if (bySha) return { ...toChangeDto(bySha), replayed: true };
 
-      if (input.deploymentId) {
-        const exists = await repo.deploymentExists(projectId, input.deploymentId);
-        if (!exists) throw AppError.notFound('Deployment', input.deploymentId);
-      }
-
       const filesChanged = normalizeList(input.filesChanged);
       const services = normalizeList(input.services);
       const receivedAt = new Date();
       const occurredAt = input.occurredAt ? new Date(input.occurredAt) : receivedAt;
 
-      const row = await repo.insert({
-        projectId,
-        deploymentId: input.deploymentId ?? null,
-        type: input.type,
-        sha: input.sha,
-        title: input.title,
-        message: input.message ?? null,
-        authorEmail: input.authorEmail ?? null,
-        authorName: input.authorName ?? null,
-        branch: input.branch ?? null,
-        url: input.url ?? null,
-        filesChanged,
-        services,
-      });
+      const row = await db.transaction(async (tx) => {
+        const txRepo = createChangesRepository(tx);
 
-      await events.append({
-        projectId,
-        type: 'change.recorded',
-        entityType: 'change',
-        entityId: row.id,
-        actorId,
-        occurredAt,
-        idempotencyKey: input.idempotencyKey,
-        payload: {
-          sha: row.sha,
-          changeType: row.type,
-          deploymentId: row.deploymentId,
-          filesChanged: row.filesChanged.length,
-          services: row.services,
-        },
+        if (input.deploymentId) {
+          const exists = await txRepo.deploymentExists(projectId, input.deploymentId);
+          if (!exists) throw AppError.notFound('Deployment', input.deploymentId);
+        }
+
+        const inserted = await txRepo.insert({
+          projectId,
+          deploymentId: input.deploymentId ?? null,
+          type: input.type,
+          sha: input.sha,
+          title: input.title,
+          message: input.message ?? null,
+          authorEmail: input.authorEmail ?? null,
+          authorName: input.authorName ?? null,
+          branch: input.branch ?? null,
+          url: input.url ?? null,
+          filesChanged,
+          services,
+        });
+
+        await events.append(
+          {
+            projectId,
+            type: 'change.recorded',
+            entityType: 'change',
+            entityId: inserted.id,
+            actorId,
+            occurredAt,
+            idempotencyKey: input.idempotencyKey,
+            payload: {
+              sha: inserted.sha,
+              changeType: inserted.type,
+              deploymentId: inserted.deploymentId,
+              filesChanged: inserted.filesChanged.length,
+              services: inserted.services,
+            },
+          },
+          tx,
+        );
+
+        await writeAudit(tx, {
+          projectId,
+          actorId,
+          action: 'create',
+          entityType: 'change',
+          entityId: inserted.id,
+          after: toChangeDto(inserted) as unknown as Record<string, unknown>,
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+        });
+
+        return inserted;
       });
 
       return { ...toChangeDto(row), replayed: false };
