@@ -6,3 +6,6 @@ export * from './enums';
 export * from './users';
 export * from './projects';
 export * from './members';
+export * from './deployments';
+export * from './changes';
+export * from './incidents';
