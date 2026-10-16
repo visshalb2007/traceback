@@ -80,15 +80,19 @@ export function canTransitionStatus(from: IncidentStatus, to: IncidentStatus): b
 
 export const incidentLinkSourceSchema = z.enum(['manual', 'suggested']);
 export type IncidentLinkSource = z.infer<typeof incidentLinkSourceSchema>;
+export const INCIDENT_LINK_SOURCES = incidentLinkSourceSchema.options;
 
 export const incidentLinkStatusSchema = z.enum(['suggested', 'confirmed', 'rejected']);
 export type IncidentLinkStatus = z.infer<typeof incidentLinkStatusSchema>;
+export const INCIDENT_LINK_STATUSES = incidentLinkStatusSchema.options;
 
 export const incidentLinkEntityTypeSchema = z.enum(['deployment', 'change']);
 export type IncidentLinkEntityType = z.infer<typeof incidentLinkEntityTypeSchema>;
+export const INCIDENT_LINK_ENTITY_TYPES = incidentLinkEntityTypeSchema.options;
 
 export const eventSourceSchema = z.enum(['api', 'github', 'system']);
 export type EventSource = z.infer<typeof eventSourceSchema>;
+export const EVENT_SOURCES = eventSourceSchema.options;
 
 export const eventTypeSchema = z.enum([
   'project.created',
@@ -127,6 +131,7 @@ export const eventEntityTypeSchema = z.enum([
   'incident_link',
 ]);
 export type EventEntityType = z.infer<typeof eventEntityTypeSchema>;
+export const EVENT_ENTITY_TYPES = eventEntityTypeSchema.options;
 
 export const auditActionSchema = z.enum([
   'create',
@@ -140,12 +145,15 @@ export const auditActionSchema = z.enum([
   'register',
 ]);
 export type AuditAction = z.infer<typeof auditActionSchema>;
+export const AUDIT_ACTIONS = auditActionSchema.options;
 
 export const webhookProviderSchema = z.enum(['github']);
 export type WebhookProvider = z.infer<typeof webhookProviderSchema>;
+export const WEBHOOK_PROVIDERS = webhookProviderSchema.options;
 
 export const webhookDeliveryStatusSchema = z.enum(['received', 'processed', 'duplicate', 'failed']);
 export type WebhookDeliveryStatus = z.infer<typeof webhookDeliveryStatusSchema>;
+export const WEBHOOK_DELIVERY_STATUSES = webhookDeliveryStatusSchema.options;
 
 /** Correlation algorithm version so stored suggestions always declare their provenance. */
 export const CORRELATION_ALGORITHM_VERSION = 'correlation-v1';

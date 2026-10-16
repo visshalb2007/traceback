@@ -15,6 +15,13 @@
       "when": 1792136823351,
       "tag": "0001_deployments_changes_incidents",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792136934472,
+      "tag": "0002_events_audit_links",
+      "breakpoints": true
     }
   ]
 }
