@@ -1,0 +1,24 @@
+{
+  "name": "traceback",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Incident tracking and deployment monitoring platform. Who broke the build?",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" build && pnpm -r --filter \"./apps/**\" build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
+    "dev": "pnpm -r --parallel dev",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}\"",
+    "db:migrate": "pnpm --filter @traceback/api db:migrate",
+    "db:seed": "pnpm --filter @traceback/api db:seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
