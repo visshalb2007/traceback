@@ -6,6 +6,7 @@ import type { UserRow } from '../../db/schema';
 import { AppError } from '../../lib/errors';
 import { hashPassword, verifyPassword } from '../../lib/password';
 import { hashToken, signToken, verifyToken } from '../../lib/tokens';
+import { writeAudit } from '../audit/audit.service';
 import { createAuthRepository, type AuthRepository } from './auth.repository';
 
 export interface RequestContext {
@@ -87,10 +88,24 @@ export function createAuthService(db: Database, env: AppEnv): AuthService {
       }
 
       const passwordHash = await hashPassword(input.password);
-      const row = await repo.createUser({
-        email: input.email,
-        name: input.name,
-        passwordHash,
+      const row = await db.transaction(async (tx) => {
+        const created = await createAuthRepository(tx).createUser({
+          email: input.email,
+          name: input.name,
+          passwordHash,
+        });
+
+        await writeAudit(tx, {
+          actorId: created.id,
+          action: 'register',
+          entityType: 'user',
+          entityId: created.id,
+          after: { email: created.email, name: created.name },
+          ip: ctx?.ip,
+          userAgent: ctx?.userAgent,
+        });
+
+        return created;
       });
 
       const issued = await issueTokens(row, ctx);
@@ -108,7 +123,20 @@ export function createAuthService(db: Database, env: AppEnv): AuthService {
         throw new AppError('UNAUTHORIZED', 'Invalid email or password');
       }
 
-      await repo.touchLastLogin(row.id, new Date());
+      await db.transaction(async (tx) => {
+        const txRepo = createAuthRepository(tx);
+        await txRepo.touchLastLogin(row.id, new Date());
+        await writeAudit(tx, {
+          actorId: row.id,
+          action: 'login',
+          entityType: 'user',
+          entityId: row.id,
+          after: { email: row.email },
+          ip: ctx?.ip,
+          userAgent: ctx?.userAgent,
+        });
+      });
+
       const issued = await issueTokens(row, ctx);
       return issued.tokens;
     },
@@ -149,15 +177,25 @@ export function createAuthService(db: Database, env: AppEnv): AuthService {
     },
 
     async logout(refreshToken, userId) {
+      let actorId = userId ?? null;
+
       if (refreshToken) {
         const stored = await repo.findRefreshTokenByHash(hashToken(refreshToken));
         if (stored) {
           await repo.revokeRefreshToken(stored.id);
-          return;
+          actorId = stored.userId;
         }
-      }
-      if (userId) {
+      } else if (userId) {
         await repo.revokeAllForUser(userId);
+      }
+
+      if (actorId) {
+        await writeAudit(db, {
+          actorId,
+          action: 'logout',
+          entityType: 'user',
+          entityId: actorId,
+        });
       }
     },
 
