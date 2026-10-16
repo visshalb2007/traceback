@@ -90,6 +90,18 @@ export function createDeploymentsRepository(db: DbExecutor) {
       return row;
     },
 
+    async findByExternalId(
+      projectId: string,
+      externalId: string,
+    ): Promise<DeploymentRow | undefined> {
+      const [row] = await db
+        .select()
+        .from(deployments)
+        .where(and(eq(deployments.projectId, projectId), eq(deployments.externalId, externalId)))
+        .limit(1);
+      return row;
+    },
+
     /** Deployments in a lookback window — the correlation engine's candidate set. */
     async listInWindow(
       projectId: string,

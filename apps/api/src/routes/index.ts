@@ -11,6 +11,7 @@ import { membersRoutes } from '../modules/members/members.routes';
 import { projectsRoutes } from '../modules/projects/projects.routes';
 import { realtimeRoutes } from '../modules/realtime/realtime.routes';
 import { timelineRoutes } from '../modules/timeline/timeline.routes';
+import { webhookIngestRoutes } from '../modules/webhooks/webhooks.ingest.routes';
 import { webhooksRoutes } from '../modules/webhooks/webhooks.routes';
 
 /**
@@ -19,6 +20,9 @@ import { webhooksRoutes } from '../modules/webhooks/webhooks.routes';
  */
 export async function registerRoutes(app: AppServer): Promise<void> {
   await app.register(healthRoutes);
+
+  // Public provider callbacks live outside the versioned API surface.
+  await app.register(webhookIngestRoutes);
 
   await app.register(
     async (api) => {

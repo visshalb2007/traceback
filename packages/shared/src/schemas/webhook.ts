@@ -45,3 +45,13 @@ export const webhookDeliverySchema = z.object({
   receivedAt: z.string(),
 });
 export type WebhookDelivery = z.infer<typeof webhookDeliverySchema>;
+
+/** What the public ingestion endpoint returns for every accepted delivery. */
+export const webhookIngestResultSchema = z.object({
+  deliveryId: z.string(),
+  event: z.string(),
+  status: webhookDeliveryStatusSchema,
+  /** True when this `X-GitHub-Delivery` had already been processed. */
+  duplicate: z.boolean(),
+});
+export type WebhookIngestResult = z.infer<typeof webhookIngestResultSchema>;
