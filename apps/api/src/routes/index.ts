@@ -7,6 +7,7 @@ import { healthRoutes } from '../modules/health/health.routes';
 import { incidentsRoutes } from '../modules/incidents/incidents.routes';
 import { membersRoutes } from '../modules/members/members.routes';
 import { projectsRoutes } from '../modules/projects/projects.routes';
+import { timelineRoutes } from '../modules/timeline/timeline.routes';
 
 /**
  * Every module exposes an async plugin so app.ts stays a flat, readable list of
@@ -24,6 +25,7 @@ export async function registerRoutes(app: AppServer): Promise<void> {
       await api.register(changesRoutes);
       await api.register(incidentsRoutes);
       await api.register(auditRoutes);
+      await api.register(timelineRoutes);
     },
     { prefix: '/api/v1' },
   );
