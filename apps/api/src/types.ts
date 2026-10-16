@@ -16,6 +16,7 @@ import type { AuditService } from './modules/audit/audit.service';
 import type { AuthService } from './modules/auth/auth.service';
 import type { EventsService } from './modules/events/events.service';
 import type { MembersRepository } from './modules/members/members.repository';
+import type { RealtimeBroker } from './modules/realtime/realtime.broker';
 
 /**
  * The one Fastify instance type this codebase uses: Zod as the schema/validator
@@ -56,6 +57,8 @@ declare module 'fastify' {
     events: EventsService;
     /** Read-side of the immutable audit log. */
     audit: AuditService;
+    /** Process-wide Postgres LISTEN broker backing the SSE stream. */
+    realtime: RealtimeBroker;
     /** preHandler factory that resolves the caller's project role and enforces the policy matrix. */
     authorize: (action: Action) => preHandlerAsyncHookHandler;
   }

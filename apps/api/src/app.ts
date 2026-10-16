@@ -14,6 +14,7 @@ import { authPlugin } from './plugins/auth.plugin';
 import { auditPlugin } from './plugins/audit.plugin';
 import { dbPlugin } from './plugins/db.plugin';
 import { eventsPlugin } from './plugins/events.plugin';
+import { realtimePlugin } from './plugins/realtime.plugin';
 import { rbacPlugin } from './plugins/rbac.plugin';
 import { registerRoutes } from './routes';
 
@@ -59,6 +60,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
   await app.register(rbacPlugin);
 
   await app.register(eventsPlugin);
+
+  await app.register(realtimePlugin);
 
   await app.register(auditPlugin);
 
