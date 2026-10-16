@@ -17,6 +17,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}\"",
     "db:migrate": "pnpm --filter @traceback/api db:migrate",
     "db:seed": "pnpm --filter @traceback/api db:seed",
+    "openapi:generate": "pnpm --filter @traceback/api openapi:generate",
     "prepare": "husky"
   },
   "devDependencies": {

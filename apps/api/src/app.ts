@@ -17,6 +17,7 @@ import { dbPlugin } from './plugins/db.plugin';
 import { eventsPlugin } from './plugins/events.plugin';
 import { realtimePlugin } from './plugins/realtime.plugin';
 import { rbacPlugin } from './plugins/rbac.plugin';
+import { registerOpenApi } from './openapi';
 import { registerRoutes } from './routes';
 
 export interface BuildAppOptions {
@@ -92,6 +93,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<AppServer
     }
     void reply.status(status).send(body);
   });
+
+  // Must precede the routes so the plugin sees every one of them.
+  await registerOpenApi(app);
 
   await registerRoutes(app);
 

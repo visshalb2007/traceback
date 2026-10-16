@@ -37,3 +37,6 @@ Thumbs.db
 # Temp
 .tmp/
 *.tmp
+
+# Generated API document (pnpm openapi:generate)
+apps/api/openapi.json
