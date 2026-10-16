@@ -3,6 +3,7 @@ import { authRoutes } from '../modules/auth/auth.routes';
 import { changesRoutes } from '../modules/changes/changes.routes';
 import { deploymentsRoutes } from '../modules/deployments/deployments.routes';
 import { healthRoutes } from '../modules/health/health.routes';
+import { incidentsRoutes } from '../modules/incidents/incidents.routes';
 import { membersRoutes } from '../modules/members/members.routes';
 import { projectsRoutes } from '../modules/projects/projects.routes';
 
@@ -20,6 +21,7 @@ export async function registerRoutes(app: AppServer): Promise<void> {
       await api.register(membersRoutes);
       await api.register(deploymentsRoutes);
       await api.register(changesRoutes);
+      await api.register(incidentsRoutes);
     },
     { prefix: '/api/v1' },
   );
