@@ -15,6 +15,7 @@ import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
+import { CorrelationPanel } from '@/components/correlation-panel';
 import { EmptyState, ErrorState } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -458,6 +459,8 @@ export default function IncidentDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <CorrelationPanel projectId={projectId} incidentId={incidentId} />
 
       <UpdatesSection projectId={projectId} incidentId={incidentId} />
     </div>
