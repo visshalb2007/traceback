@@ -40,3 +40,6 @@ Thumbs.db
 
 # Generated API document (pnpm openapi:generate)
 apps/api/openapi.json
+
+# Local Postgres cluster created by `pnpm db:local`
+apps/api/.local-postgres/

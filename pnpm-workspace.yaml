@@ -14,3 +14,4 @@ allowBuilds:
   workerd: true
   '@parcel/watcher': true
   msw: true
+  '@embedded-postgres/windows-x64': true
