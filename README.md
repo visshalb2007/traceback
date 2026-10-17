@@ -8,6 +8,7 @@ the question every on-call engineer asks first: _which change is most likely res
 
 Every mutation is an event. Events can arrive late, out of order, or twice — TraceBack treats
 all three as normal, keeps a stable ordering, and never silently overwrites a human decision.
+<img width="1892" height="897" alt="image" src="https://github.com/user-attachments/assets/9a99ea14-b7fb-4cab-95a9-5dafca30f2e5" />
 
 ---
 
